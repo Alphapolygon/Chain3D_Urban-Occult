@@ -372,3 +372,141 @@ button.ready-button {
 @keyframes slash-ko { 0% { opacity: 0; transform: rotate(-9deg) scaleX(.2); } 22% { opacity: 1; } 100% { opacity: 0; transform: rotate(-9deg) scaleX(1.2); } }
 @keyframes slash-ko-text { 0% { opacity: 0; transform: scale(.42) rotate(-9deg); } 20% { opacity: 1; transform: scale(1.08) rotate(-4deg); } 100% { opacity: 0; transform: scale(1.18) rotate(-4deg); } }
 @keyframes invalid-pop { 0% { opacity: 0; transform: scale(.72); } 22% { opacity: 1; transform: scale(1.05); } 100% { opacity: 0; transform: scale(1.0); } }
+
+/* --- Enemy turn and panel-anchored combat VFX patch --- */
+.hero-panel,
+.enemy-panel,
+.center-help {
+  position: relative;
+  overflow: visible;
+}
+.enemy-panel.enemy-turn {
+  border-color: rgba(255, 228, 94, .95);
+  box-shadow: 0 0 34px rgba(255, 228, 94, .32), 0 0 52px rgba(255, 55, 95, .18), inset 0 0 24px rgba(255, 228, 94, .08);
+  animation: enemy-turn-warning .62s steps(2, end) infinite;
+}
+.enemy-turn-banner {
+  position: fixed;
+  left: 50%;
+  top: 20%;
+  transform: translate(-50%, -50%) rotate(-3deg);
+  z-index: 1200;
+  pointer-events: none;
+  font-size: clamp(36px, 6vw, 86px);
+  font-weight: 1000;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  color: #ffe45e;
+  text-shadow: 0 0 16px #ff375f, 0 0 42px #ffe45e, 4px 4px 0 #05040b;
+  animation: enemy-turn-banner .7s cubic-bezier(.16, 1.28, .3, 1) both;
+}
+.combat-slash {
+  position: absolute;
+  inset: -28px;
+  z-index: 20;
+  pointer-events: none;
+  display: grid;
+  place-items: center;
+  font-size: clamp(26px, 4vw, 68px);
+  font-weight: 1000;
+  letter-spacing: .18em;
+  text-transform: uppercase;
+  color: #fff;
+  mix-blend-mode: screen;
+  overflow: visible;
+}
+.combat-slash::before,
+.combat-slash::after {
+  left: -14%;
+  right: -14%;
+  top: 50%;
+  height: 8px;
+}
+.center-help .combat-slash {
+  inset: -20px -90px;
+}
+@keyframes enemy-turn-warning { 0% { transform: translateX(0); } 50% { transform: translateX(-5px); } 100% { transform: translateX(0); } }
+@keyframes enemy-turn-banner { 0% { opacity: 0; transform: translate(-50%, -50%) scale(.76) rotate(-7deg); } 28% { opacity: 1; transform: translate(-50%, -50%) scale(1.08) rotate(-3deg); } 100% { opacity: 0; transform: translate(-50%, -50%) scale(1.02) rotate(-3deg); } }
+@keyframes slash-player { 0% { opacity: 0; transform: rotate(-16deg) translateX(-125%); } 24% { opacity: 1; } 100% { opacity: 0; transform: rotate(-16deg) translateX(125%); } }
+@keyframes slash-enemy { 0% { opacity: 0; transform: rotate(16deg) translateX(125%); } 24% { opacity: 1; } 100% { opacity: 0; transform: rotate(16deg) translateX(-125%); } }
+
+/* Final anchored combat effect override: effects are positioned over character UI, not the cube. */
+.combat-slash {
+  position: fixed;
+  inset: auto;
+  z-index: 1300;
+  pointer-events: none;
+  display: grid;
+  place-items: center;
+  font-size: clamp(24px, 4vw, 72px);
+  font-weight: 1000;
+  letter-spacing: .18em;
+  text-transform: uppercase;
+  color: #fff;
+  mix-blend-mode: screen;
+  overflow: visible;
+}
+.combat-slash::before,
+.combat-slash::after {
+  left: -16%;
+  right: -16%;
+  top: 50%;
+}
+.combat-slash.enemy-turn {
+  color: #ffe45e;
+  text-shadow: 0 0 14px #ff375f, 0 0 34px #ffe45e, 3px 3px 0 #05040b;
+  animation: enemy-turn-banner .72s cubic-bezier(.16, 1.28, .3, 1) both;
+}
+.combat-slash.enemy-turn::before {
+  background: linear-gradient(90deg, transparent, #ff375f, #ffe45e, transparent);
+  transform: rotate(0deg) scaleX(.9);
+  animation: slash-ko .58s ease-out both;
+  height: 8px;
+  box-shadow: 0 0 24px #ff375f, 0 0 44px #ffe45e;
+}
+.combat-slash.anchor-enemy,
+.combat-slash.anchor-heroes {
+  transform-origin: center;
+}
+
+/* --- Text timing and panel-anchored strike VFX pass --- */
+.combat-slash.panel-anchored {
+  position: absolute;
+  inset: -34px;
+  left: auto !important;
+  top: auto !important;
+  width: auto !important;
+  height: auto !important;
+  z-index: 60;
+}
+.combat-slash.screen-anchored {
+  position: fixed;
+  inset: auto;
+  z-index: 1300;
+}
+.combat-slash.panel-anchored::before,
+.combat-slash.panel-anchored::after {
+  left: -10%;
+  right: -10%;
+  top: 50%;
+}
+.combat-slash.panel-anchored.player::before,
+.combat-slash.panel-anchored.enemy::before {
+  height: 10px;
+  animation-duration: .62s;
+}
+.combat-slash.panel-anchored.enemy-turn {
+  animation-duration: 1.08s;
+}
+.combat-slash.panel-anchored.ko {
+  animation-duration: 1.35s;
+}
+.combat-slash.screen-anchored.invalid {
+  animation-duration: 1s;
+}
+.enemy-turn-banner {
+  animation-duration: 1.08s;
+}
+.ko-banner {
+  animation-duration: 1.35s;
+}

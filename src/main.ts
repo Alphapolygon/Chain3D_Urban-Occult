@@ -15,6 +15,7 @@ import { HeroPanel } from './ui/HeroPanel';
 import { EnemyPanel } from './ui/EnemyPanel';
 import { QueuePreview } from './ui/QueuePreview';
 import { DarkwebBodega } from './ui/DarkwebBodega';
+import { SoundEngine } from './render/SoundEngine';
 
 const h = React.createElement;
 const sceneRoot = document.querySelector<HTMLDivElement>('#scene-root');
@@ -70,6 +71,13 @@ let pointerDownY = 0;
 let processedAction: LastActionReport | null = null;
 let hitStopUntil = 0;
 let koShopTimeout: number | null = null;
+let enemyTurnTimeout: number | null = null;
+const sfx = new SoundEngine();
+
+const MIN_TEXT_DISPLAY_MS = 1000;
+const ENEMY_TURN_DELAY_MS = 1080;
+const KO_TO_SHOP_DELAY_MS = 1500;
+
 
 // --- PARTICLE SYSTEM ---
 const particleGroup = new THREE.Group();
@@ -90,7 +98,7 @@ function spawnMatchParticles(indices: readonly number[], board: BreachBoard): vo
     new TWEEN.Tween({ scale: 1, opacity: 1 })
       .to({ scale: 1.8, opacity: 0 }, 350)
       .easing(TWEEN.Easing.Quadratic.Out)
-      .onUpdate((obj) => {
+      .onUpdate((obj: { scale: number; opacity: number }) => {
         mesh.scale.setScalar(obj.scale);
         const material = mesh.material as THREE.MeshBasicMaterial;
         material.opacity = obj.opacity;
@@ -103,12 +111,43 @@ function spawnMatchParticles(indices: readonly number[], board: BreachBoard): vo
   }
 }
 
-function spawnCombatSlash(kind: 'player' | 'enemy' | 'ko' | 'invalid'): void {
+type CombatEffectKind = 'player' | 'enemy' | 'ko' | 'invalid' | 'enemy-turn';
+type CombatEffectAnchor = 'enemy' | 'heroes' | 'screen';
+
+function combatEffectDuration(kind: CombatEffectKind): number {
+  if (kind === 'ko') return Math.max(MIN_TEXT_DISPLAY_MS, 1350);
+  if (kind === 'enemy-turn') return Math.max(MIN_TEXT_DISPLAY_MS, ENEMY_TURN_DELAY_MS);
+  if (kind === 'invalid') return MIN_TEXT_DISPLAY_MS;
+  return 620;
+}
+
+function effectAnchorElement(anchor: CombatEffectAnchor): HTMLElement | null {
+  if (anchor === 'enemy') return document.querySelector<HTMLElement>('.enemy-panel');
+  if (anchor === 'heroes') return document.querySelector<HTMLElement>('.hero-panel');
+  return null;
+}
+
+function spawnCombatSlash(kind: CombatEffectKind, anchor: CombatEffectAnchor): void {
   const el = document.createElement('div');
-  el.className = `combat-slash ${kind}`;
-  el.textContent = kind === 'ko' ? 'K.O.' : kind === 'invalid' ? 'BLOCKED' : '';
-  document.body.appendChild(el);
-  window.setTimeout(() => el.remove(), kind === 'ko' ? 1100 : 520);
+  el.className = `combat-slash ${kind} anchor-${anchor}`;
+  el.textContent = kind === 'ko' ? 'K.O.' : kind === 'invalid' ? 'BLOCKED' : kind === 'enemy-turn' ? 'ENEMY TURN' : '';
+
+  const panelTarget = effectAnchorElement(anchor);
+  if (panelTarget) {
+    el.classList.add('panel-anchored');
+    panelTarget.appendChild(el);
+  } else {
+    const width = kind === 'invalid' ? 420 : 520;
+    const height = kind === 'invalid' ? 150 : 190;
+    el.classList.add('screen-anchored');
+    el.style.left = `${Math.max(8, window.innerWidth * 0.5 - width * 0.5)}px`;
+    el.style.top = `${Math.max(8, window.innerHeight * 0.5 - height * 0.5)}px`;
+    el.style.width = `${Math.min(window.innerWidth - 16, width)}px`;
+    el.style.height = `${height}px`;
+    document.body.appendChild(el);
+  }
+
+  window.setTimeout(() => el.remove(), combatEffectDuration(kind));
 }
 
 function hitStop(ms: number): void {
@@ -122,12 +161,30 @@ function clearKoShopTimer(): void {
   }
 }
 
+function clearEnemyTurnTimer(): void {
+  if (enemyTurnTimeout !== null) {
+    window.clearTimeout(enemyTurnTimeout);
+    enemyTurnTimeout = null;
+  }
+}
+
 function scheduleShopAfterKo(): void {
   if (koShopTimeout !== null || run.getSnapshot().phase !== 'ko') return;
   koShopTimeout = window.setTimeout(() => {
     koShopTimeout = null;
     if (run.openShopAfterKo()) invalidate(false);
-  }, speedMode ? 650 : 1650);
+  }, KO_TO_SHOP_DELAY_MS);
+}
+
+function scheduleEnemyAttackAfterTurnBanner(): void {
+  if (enemyTurnTimeout !== null || run.getSnapshot().phase !== 'enemy-turn') return;
+  enemyTurnTimeout = window.setTimeout(() => {
+    enemyTurnTimeout = null;
+    if (run.resolveEnemyTurnAttack()) {
+      playLastActionVisuals();
+      invalidate(true);
+    }
+  }, ENEMY_TURN_DELAY_MS);
 }
 
 function playLastActionVisuals(): void {
@@ -135,28 +192,40 @@ function playLastActionVisuals(): void {
   if (processedAction === action) return;
   processedAction = action;
 
+  const snapCells = action.snap?.cellsMoved ?? 0;
+  const snapClusters = action.snap?.clustersMoved ?? 0;
+
+  if (action.invalidPlacement) sfx.playError();
+  if (action.removedIndices && action.removedIndices.length > 0) sfx.playMatch(Math.max(1, action.chain));
+  if (snapClusters > 0) sfx.playSnap(snapCells);
+  if (action.playerAttack) sfx.playSlash(false);
+  if (action.enemyAttack) sfx.playSlash(true);
+
   if (action.snap?.movedIndices && action.snap.movedIndices.length > 0) breachRenderer.prepareSnapAnimation(action.snap.movedIndices);
   if (action.removedIndices && action.removedIndices.length > 0) spawnMatchParticles(action.removedIndices, run.board);
 
+  if (action.enemyTurn) {
+    spawnCombatSlash('enemy-turn', 'enemy');
+    cameraRig.triggerActionCamera(speedMode);
+    cameraRig.shake(0.32, 180);
+  }
   if (action.playerAttack) {
-    spawnCombatSlash(action.enemyDefeated ? 'ko' : 'player');
+    spawnCombatSlash(action.enemyDefeated ? 'ko' : 'player', 'enemy');
     cameraRig.triggerActionCamera(speedMode);
     cameraRig.shake(action.enemyDefeated ? 2.4 : 0.75, action.enemyDefeated ? 620 : 240);
     hitStop(action.enemyDefeated ? 220 : 80);
   }
   if (action.enemyAttack) {
-    spawnCombatSlash('enemy');
+    spawnCombatSlash('enemy', 'heroes');
     cameraRig.triggerActionCamera(speedMode);
     cameraRig.shake(action.coreGrew ? 1.35 : 0.9, action.coreGrew ? 420 : 280);
     hitStop(110);
   }
   if (action.invalidPlacement) {
-    spawnCombatSlash('invalid');
+    spawnCombatSlash('invalid', 'screen');
     cameraRig.shake(0.22, 120);
   }
 
-  const snapCells = action.snap?.cellsMoved ?? 0;
-  const snapClusters = action.snap?.clustersMoved ?? 0;
   if (snapClusters > 0) {
     const shake = Math.min(2.2, 0.35 + snapCells * 0.035 + snapClusters * 0.14);
     cameraRig.shake(shake, Math.min(480, 130 + snapCells * 12));
@@ -165,12 +234,14 @@ function playLastActionVisuals(): void {
     cameraRig.triggerActionCamera(speedMode);
     hitStop(action.hardKnockdown ? 160 : 100);
   }
+  if (action.enemyTurn) scheduleEnemyAttackAfterTurnBanner();
   if (action.enemyDefeated) scheduleShopAfterKo();
 }
 
 // --- DEBUG MENU LOGIC ---
 function applyDebugConfig(newConfig: RunConfig): void {
   clearKoShopTimer();
+  clearEnemyTurnTimer();
   const maxSize = newConfig.board.maxSize % 2 === 0 ? newConfig.board.maxSize + 1 : newConfig.board.maxSize;
   const initialRadius = Math.min(newConfig.board.initialRadius, Math.floor(maxSize / 2) - 1);
   runConfig = { ...newConfig, board: { ...newConfig.board, maxSize, initialRadius } };
@@ -205,11 +276,11 @@ function DebugMenu({ config, onApply, speed, onToggleSpeed, onClose }: { config:
 
 function invalidate(boardChanged = true): void { sceneDirty = sceneDirty || boardChanged; renderUi(); }
 function renderUi(): void { root.render(h(App, { snapshot: run.getSnapshot() })); }
-function restartRun(): void { clearKoShopTimer(); run.startRun((Date.now() ^ Math.floor(Math.random() * 0xffffffff)) >>> 0); processedAction = null; invalidate(true); }
+function restartRun(): void { clearKoShopTimer(); clearEnemyTurnTimer(); run.startRun((Date.now() ^ Math.floor(Math.random() * 0xffffffff)) >>> 0); processedAction = null; invalidate(true); }
 function onActivateHero(heroIndex: number): void { if (run.tryActivateHeroPower(heroIndex)) { playLastActionVisuals(); invalidate(true); } }
 function onSwapCache(): void { if (run.playerSwapCache()) invalidate(false); }
 function onBuy(itemId: ShopItemId): void { if (run.tryBuy(itemId)) { playLastActionVisuals(); invalidate(true); } else invalidate(false); }
-function onContinueAfterShop(): void { clearKoShopTimer(); run.continueAfterShop(); invalidate(true); }
+function onContinueAfterShop(): void { clearKoShopTimer(); clearEnemyTurnTimer(); run.continueAfterShop(); invalidate(true); }
 function onForceAttack(): void { run.forceEnemyAttack(); playLastActionVisuals(); invalidate(true); }
 function onGrowCore(amount: number): void { run.forceCoreGrowth(amount); playLastActionVisuals(); invalidate(true); }
 function toggleSpeedMode(): void { speedMode = !speedMode; invalidate(false); }
@@ -218,9 +289,11 @@ function App({ snapshot }: { snapshot: RunSnapshot }) {
   const [debugOpen, setDebugOpen] = React.useState(true);
   const helpText = snapshot.phase === 'ko'
     ? 'K.O. Nightmare banished. Darkweb Bodega is connecting...'
-    : snapshot.shopOpen
-      ? 'Shop is open. Click a Breach cell before buying cell-target items, then continue to the next monster.'
-      : 'Click an exposed cube face to place the next block. Drag to rotate, but remember: rotation spends a move.';
+    : snapshot.phase === 'enemy-turn'
+      ? 'ENEMY TURN. Brace for impact.'
+      : snapshot.shopOpen
+        ? 'Shop is open. Click a Breach cell before buying cell-target items, then continue to the next monster.'
+        : 'Click an exposed cube face to place the next block. Drag to rotate, but remember: rotation spends a move.';
 
   return h(React.Fragment, null,
     debugOpen
@@ -241,13 +314,14 @@ function App({ snapshot }: { snapshot: RunSnapshot }) {
       )
     ),
     h(DarkwebBodega, { open: snapshot.shopOpen, credits: snapshot.credits, selectedCellIndex: snapshot.selectedCellIndex, rerollsUsedThisShop: snapshot.rerollsUsedThisShop, onBuy, onContinue: onContinueAfterShop }),
+    snapshot.phase === 'enemy-turn' ? h('div', { className: 'enemy-turn-banner' }, 'ENEMY TURN') : null,
     snapshot.phase === 'ko' ? h('div', { className: 'ko-banner' }, 'NIGHTMARE BANISHED') : null,
     snapshot.runOver ? h('div', { className: 'game-over' }, h('div', { className: 'panel', style: { maxWidth: 520 } }, h('div', { className: 'shop-title' }, 'Run Ended'), h('p', null, snapshot.lossReason), h('p', null, `Score ${snapshot.score}. Enemies defeated ${snapshot.enemiesDefeated}.`), h('button', { onClick: restartRun }, 'Quick Restart'))) : null
   );
 }
 
-webglRenderer.domElement.addEventListener('pointerdown', (event) => { pointerDownX = event.clientX; pointerDownY = event.clientY; });
-webglRenderer.domElement.addEventListener('pointerup', (event) => {
+webglRenderer.domElement.addEventListener('pointerdown', (event: PointerEvent) => { sfx.init(); pointerDownX = event.clientX; pointerDownY = event.clientY; });
+webglRenderer.domElement.addEventListener('pointerup', (event: PointerEvent) => {
   if (Math.hypot(event.clientX - pointerDownX, event.clientY - pointerDownY) > 5) return;
   const pick = picking.pick(event, webglRenderer.domElement, cameraRig.camera, breachRenderer, run.board);
   if (!pick) {

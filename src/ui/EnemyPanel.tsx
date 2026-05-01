@@ -9,7 +9,7 @@ type EnemyPanelProps = {
 
 export function EnemyPanel(props: EnemyPanelProps) {
   const hpPct = props.enemy.maxHp > 0 ? (props.enemy.hp / props.enemy.maxHp) * 100 : 0;
-  const statusClass = props.phase === 'ko' || props.lastAction.enemyDefeated ? 'enemy-ko' : props.lastAction.hardKnockdown ? 'knockdown' : props.enemy.poiseTurns > 0 ? 'poise' : props.lastAction.playerAttack ? 'enemy-hit' : '';
+  const statusClass = props.phase === 'ko' || props.lastAction.enemyDefeated ? 'enemy-ko' : props.phase === 'enemy-turn' || props.lastAction.enemyTurn ? 'enemy-turn' : props.lastAction.hardKnockdown ? 'knockdown' : props.enemy.poiseTurns > 0 ? 'poise' : props.lastAction.playerAttack ? 'enemy-hit' : '';
   return (
     <div className={`panel enemy-panel ${statusClass}`}>
       <div className="fighter-label">Nightmare</div>
@@ -18,8 +18,8 @@ export function EnemyPanel(props: EnemyPanelProps) {
       <div className="stat-grid">
         <span>Wave</span><strong>{props.wave}</strong>
         <span>Enemy HP</span><strong>{props.enemy.hp}/{props.enemy.maxHp}</strong>
-        <span>Attack</span><strong>{props.enemy.attackTimer} moves / {props.enemy.damage} dmg</strong>
-        <span>Status</span><strong>{props.phase === 'ko' ? 'BANISHED' : props.enemy.poiseTurns > 0 ? 'SUPER ARMOR' : 'open'}</strong>
+        <span>Attack</span><strong>{props.phase === 'enemy-turn' ? 'INCOMING' : `${props.enemy.attackTimer} moves`} / {props.enemy.damage} dmg</strong>
+        <span>Status</span><strong>{props.phase === 'ko' ? 'BANISHED' : props.phase === 'enemy-turn' ? 'ENEMY TURN' : props.enemy.poiseTurns > 0 ? 'SUPER ARMOR' : 'open'}</strong>
         <span>Player moves</span><strong>{props.movesLeft}</strong>
         <span>Score</span><strong>{props.score}</strong>
         <span>Bodega pts</span><strong>{props.credits}</strong>

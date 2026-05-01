@@ -39,18 +39,12 @@ export class CameraRig {
     });
   }
 
-  triggerActionCamera(speedMode = false): void {
-    if (speedMode) {
-      this.shake(0.85, 220);
-      return;
-    }
-    this.mode = 'action';
-    this.controls.enabled = false;
-    new TWEEN.Tween(this.camera.position)
-      .to({ x: this.actionPosition.x, y: this.actionPosition.y, z: this.actionPosition.z }, 300)
-      .easing(TWEEN.Easing.Cubic.Out)
-      .start();
-    window.setTimeout(() => this.resetToTacticalCamera(), 1500);
+  triggerActionCamera(_speedMode = false): void {
+    // Cinematic pullback disabled for the current prototype.
+    // Keep the camera locked in tactical puzzle view; impact is handled by
+    // panel-anchored strike VFX, hit stop, particles, and screen shake.
+    this.mode = 'tactical';
+    this.controls.enabled = true;
   }
 
   resetToTacticalCamera(): void {

@@ -9,7 +9,7 @@ import { IslandSnapSystem, type IslandSnapResult } from './IslandSnapSystem';
 import { MatchSystem } from './MatchSystem';
 import { tryBuyShopItem, ShopItemId, type ShopRunApi, type ShopItemDefinition } from './ShopSystem';
 
-export type RunPhase = 'playing' | 'ko' | 'shop' | 'dead' | 'containment-failure';
+export type RunPhase = 'playing' | 'enemy-turn' | 'ko' | 'shop' | 'dead' | 'containment-failure';
 
 export type RunSynergy = { id: string; title: string; description: string; islandSnapDamageMultiplier: number; };
 export type LastActionReport = {
@@ -25,6 +25,7 @@ export type LastActionReport = {
   enemyDefeated?: boolean;
   coreGrew?: boolean;
   invalidPlacement?: boolean;
+  enemyTurn?: boolean;
 };
 export type RunConfig = {
   board: BreachBoardConfig;
@@ -104,6 +105,7 @@ export class RunState implements ShopRunApi {
   metaXpAwarded = 0;
   private rng: Mulberry32;
   private poiseAppliedThisTurn = false;
+  private pendingEnemyAttackForced = false;
 
   constructor(config: RunConfig, draft: readonly HeroDefinition[]) {
     this.config = config;
@@ -130,7 +132,7 @@ export class RunState implements ShopRunApi {
     this.phase = 'playing'; this.wave = 1; this.enemiesDefeated = 0; this.frontlineIndex = 0;
     this.movesLeft = this.config.movesPerTurn; this.score = 0; this.points = 0; this.matchedBlocks = 0;
     this.extraMovesNextTurn = 0; this.selectedCellIndex = -1; this.lossReason = ''; this.metaXpAwarded = 0;
-    this.cacheColor = null; this.cacheUsedThisTurn = false; this.rerollsUsedThisShop = 0; this.poiseAppliedThisTurn = false;
+    this.cacheColor = null; this.cacheUsedThisTurn = false; this.rerollsUsedThisShop = 0; this.poiseAppliedThisTurn = false; this.pendingEnemyAttackForced = false;
     this.enemy = createEnemyState(enemyForWave(1), 1);
     this.synergy = rollSynergy(this.heroes, this.rng);
     this.lastAction = { text: `Run started. ${this.synergy.title}`, removed: 0, chain: 0, removedIndices: [] };
@@ -252,12 +254,22 @@ export class RunState implements ShopRunApi {
     this.extraMovesNextTurn = 0;
     this.cacheUsedThisTurn = false;
     this.poiseAppliedThisTurn = false;
+    this.pendingEnemyAttackForced = false;
     this.phase = 'playing';
     this.lastAction = { text: `${this.enemy.name} manifested.`, removed: 0, chain: 0, removedIndices: [] };
     this.addLog(this.lastAction.text);
   }
 
-  forceEnemyAttack(): void { if (this.phase === 'playing') this.resolveEnemyAttackNow(true); }
+  forceEnemyAttack(): void {
+    if (this.phase === 'playing') this.beginEnemyTurn(true);
+    else if (this.phase === 'enemy-turn') this.resolveEnemyTurnAttack();
+  }
+
+  resolveEnemyTurnAttack(): boolean {
+    if (this.phase !== 'enemy-turn') return false;
+    this.resolveEnemyAttackNow(this.pendingEnemyAttackForced);
+    return true;
+  }
   forceCoreGrowth(amount: number): void {
     const r = expandStaticCore(this.board, amount);
     this.lastAction = { text: `Core expanded ${r.oldRadius} -> ${r.newRadius}. Colored growth blocks spawned; matches wait for player placement.`, removed: 0, chain: 0, removedIndices: [], coreGrew: true };
@@ -391,7 +403,8 @@ export class RunState implements ShopRunApi {
     this.enemy.attackTimer = Math.max(0, this.enemy.attackTimer - 1);
 
     if (this.enemy.attackTimer <= 0) {
-      this.resolveEnemyAttackNow(false);
+      this.beginEnemyTurn(false);
+      return;
     } else {
       const message = `${this.enemy.name} attacks in ${this.enemy.attackTimer} moves.`;
       this.addLog(message);
@@ -403,8 +416,25 @@ export class RunState implements ShopRunApi {
     if (this.phase === 'playing' && this.movesLeft <= 0) this.refreshMoveBatch();
   }
 
-  private resolveEnemyAttackNow(forced: boolean): void {
+  private beginEnemyTurn(forced: boolean): void {
     if (this.phase !== 'playing') return;
+    this.pendingEnemyAttackForced = forced;
+    this.phase = 'enemy-turn';
+    const previous = this.lastAction;
+    const warning = `${forced ? 'Forced: ' : ''}ENEMY TURN. ${this.enemy.name} prepares to strike!`;
+    this.lastAction = {
+      ...previous,
+      text: previous.removed > 0 || previous.playerAttack || previous.snap?.clustersMoved
+        ? `${previous.text} ${warning}`
+        : warning,
+      removedIndices: previous.removedIndices ?? [],
+      enemyTurn: true
+    };
+    this.addLog(warning);
+  }
+
+  private resolveEnemyAttackNow(forced: boolean): void {
+    if (this.phase !== 'enemy-turn') return;
     const poiseWasAppliedThisTurn = this.poiseAppliedThisTurn;
     const attack = applyEnemyAttack(this.heroes, this.enemy, this.frontlineIndex);
     const growthChance = this.currentCoreGrowthChance();
@@ -420,12 +450,17 @@ export class RunState implements ShopRunApi {
     }
 
     this.enemy.attackTimer = this.enemy.attackEveryTurns;
+    this.pendingEnemyAttackForced = false;
     this.lastAction = { text, removed: 0, chain: 0, removedIndices: [], enemyAttack: true, coreGrew };
     this.addLog(text);
 
     if (!poiseWasAppliedThisTurn && this.enemy.poiseTurns > 0) this.enemy.poiseTurns--;
     this.poiseAppliedThisTurn = false;
     this.checkLossConditions();
+    if (!this.runOver && this.phase === 'enemy-turn') {
+      this.phase = 'playing';
+      if (this.movesLeft <= 0) this.refreshMoveBatch();
+    }
   }
 
   private refreshMoveBatch(): void {

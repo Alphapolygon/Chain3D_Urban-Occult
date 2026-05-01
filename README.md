@@ -23,6 +23,7 @@ The project intentionally does not ship with `package-lock.json` right now becau
 - Fighter-style HUD: Cleaners left, Breach center, Nightmare right.
 - Smaller default board for readability (`maxSize: 15`, `initialRadius: 4`).
 - Debug panel for board boundary, initial radius, fill percentage, and speed mode.
+- Seeded connected-cluster matching: placed/snap-moved blocks clear the entire face-connected same-color blob when the group size is 3+.
 - Match removed-index tracking for particle effects.
 - Match pop particles driven by `@tweenjs/tween.js`.
 - Dynamic camera tactical/action stance.
