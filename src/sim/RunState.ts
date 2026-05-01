@@ -9,7 +9,7 @@ import { IslandSnapSystem, type IslandSnapResult } from './IslandSnapSystem';
 import { MatchSystem } from './MatchSystem';
 import { tryBuyShopItem, ShopItemId, type ShopRunApi, type ShopItemDefinition } from './ShopSystem';
 
-export type RunPhase = 'playing' | 'shop' | 'dead' | 'containment-failure';
+export type RunPhase = 'playing' | 'ko' | 'shop' | 'dead' | 'containment-failure';
 
 export type RunSynergy = { id: string; title: string; description: string; islandSnapDamageMultiplier: number; };
 export type LastActionReport = {
@@ -20,8 +20,23 @@ export type LastActionReport = {
   removedIndices?: number[];
   hardKnockdown?: boolean;
   poiseBlocked?: boolean;
+  playerAttack?: boolean;
+  enemyAttack?: boolean;
+  enemyDefeated?: boolean;
+  coreGrew?: boolean;
+  invalidPlacement?: boolean;
 };
-export type RunConfig = { board: BreachBoardConfig; movesPerTurn: number; queueLength: number; scorePerBlock: number; matchMinimum: number; maxChains: number; seed?: number; };
+export type RunConfig = {
+  board: BreachBoardConfig;
+  movesPerTurn: number;
+  queueLength: number;
+  scorePerBlock: number;
+  matchMinimum: number;
+  maxChains: number;
+  seed?: number;
+  enemyCoreGrowthChanceMin?: number;
+  enemyCoreGrowthChanceMax?: number;
+};
 export type RunSnapshot = {
   phase: RunPhase; shopOpen: boolean; runOver: boolean; lossReason: string;
   heroes: HeroState[]; enemy: EnemyState; queue: number[]; cacheColor: number | null; cacheUsedThisTurn: boolean; frontlineIndex: number;
@@ -125,6 +140,11 @@ export class RunState implements ShopRunApi {
   peekQueue(offset: number): number { return this.blockQueue.peek(offset); }
   selectCell(index: number): void { this.selectedCellIndex = this.board.inBoundsIndex(index) ? index : -1; }
 
+  reportInvalidPlacement(reason = 'Invalid placement. Click an exposed face with empty space next to it.'): void {
+    this.lastAction = { text: reason, removed: 0, chain: 0, removedIndices: [], invalidPlacement: true };
+    this.addLog(reason);
+  }
+
   playerSwapCache(): boolean {
     if (this.phase !== 'playing' || this.cacheUsedThisTurn) return false;
     if (this.cacheColor === null) {
@@ -143,19 +163,24 @@ export class RunState implements ShopRunApi {
 
   playerPlaceAtIndex(index: number): boolean {
     if (this.phase !== 'playing') return false;
-    if (!this.board.placeAtIndex(index, this.blockQueue.peek(0))) { this.addLog('Invalid placement.'); return false; }
+    if (!this.board.placeAtIndex(index, this.blockQueue.peek(0))) {
+      this.reportInvalidPlacement('Blocked: that face has no valid empty placement cell. Try another exposed side.');
+      return false;
+    }
     this.blockQueue.consume();
-    this.consumeMove('Placed block.', false);
-    this.resolveBoardAfterMatches();
+    this.consumeMove('Placed block.');
+    this.resolveBoardAfterMatches(undefined, [index]);
     this.checkEnemyDefeated();
+    if (this.phase === 'playing') this.advanceEnemyAfterPlayerMove();
     this.checkLossConditions();
-    if (!this.runOver && !this.shopOpen && this.movesLeft <= 0) this.endPlayerTurn();
     return true;
   }
 
   playerRotateBreach(): boolean {
     if (this.phase !== 'playing') return false;
-    this.consumeMove('Committed rotation.', true);
+    this.consumeMove('Committed rotation.');
+    this.advanceEnemyAfterPlayerMove();
+    this.checkLossConditions();
     return true;
   }
 
@@ -167,8 +192,14 @@ export class RunState implements ShopRunApi {
     let message = '';
     let snap: IslandSnapResult | undefined;
     let removedIndices: number[] = [];
+    let playerAttack = false;
     switch (hero.activePower) {
-      case 'hex-burst': message = `${hero.name} hex-burst for ${damageEnemy(this.enemy, hero.baseDamage * 22 + 90)} damage.`; break;
+      case 'hex-burst': {
+        const dealt = damageEnemy(this.enemy, hero.baseDamage * 22 + 90);
+        playerAttack = dealt > 0;
+        message = `${hero.name} hex-burst for ${dealt} damage.`;
+        break;
+      }
       case 'shield-team': message = `${hero.name} shielded the crew for ${shieldTeam(this.heroes, 28)} total shield.`; break;
       case 'core-stabilize': { const r = shrinkStaticCore(this.board, 1); message = `${hero.name} stabilized core ${r.oldRadius} -> ${r.newRadius}.`; break; }
       case 'breach-bomb': {
@@ -176,13 +207,14 @@ export class RunState implements ShopRunApi {
         this.resolveBoardAfterManualDestruction();
         snap = this.lastAction.snap;
         removedIndices = this.lastAction.removedIndices ?? [];
+        playerAttack = removed > 0 || !!this.lastAction.playerAttack;
         message = `${hero.name} erased ${removed} blocks. ${this.lastAction.text}`;
         break;
       }
       case 'queue-hack': this.blockQueue.rerollAll(); this.extraMovesNextTurn++; message = `${hero.name} hacked the queue and banked +1 move.`; break;
     }
     spendHeroAp(hero);
-    this.lastAction = { text: message, removed: 0, chain: 0, snap, removedIndices };
+    this.lastAction = { text: message, removed: 0, chain: 0, snap, removedIndices, playerAttack };
     this.addLog(message);
     this.checkEnemyDefeated();
     this.checkLossConditions();
@@ -203,6 +235,15 @@ export class RunState implements ShopRunApi {
     return ok;
   }
 
+  openShopAfterKo(): boolean {
+    if (this.phase !== 'ko') return false;
+    this.phase = 'shop';
+    this.rerollsUsedThisShop = 0;
+    this.lastAction = { text: 'Darkweb Bodega connection opened.', removed: 0, chain: 0, removedIndices: [] };
+    this.addLog(this.lastAction.text);
+    return true;
+  }
+
   continueAfterShop(): void {
     if (this.phase !== 'shop') return;
     this.wave++;
@@ -216,8 +257,13 @@ export class RunState implements ShopRunApi {
     this.addLog(this.lastAction.text);
   }
 
-  forceEnemyAttack(): void { if (this.phase === 'playing') { this.enemy.attackTimer = 1; this.endPlayerTurn(); } }
-  forceCoreGrowth(amount: number): void { const r = expandStaticCore(this.board, amount); this.lastAction = { text: `Core expanded ${r.oldRadius} -> ${r.newRadius}.`, removed: 0, chain: 0, removedIndices: [] }; this.checkLossConditions(); }
+  forceEnemyAttack(): void { if (this.phase === 'playing') this.resolveEnemyAttackNow(true); }
+  forceCoreGrowth(amount: number): void {
+    const r = expandStaticCore(this.board, amount);
+    this.lastAction = { text: `Core expanded ${r.oldRadius} -> ${r.newRadius}. Colored growth blocks spawned; matches wait for player placement.`, removed: 0, chain: 0, removedIndices: [], coreGrew: true };
+    this.addLog(this.lastAction.text);
+    this.checkLossConditions();
+  }
 
   clearRadius1(index: number): number {
     if (!this.board.inBoundsIndex(index)) return 0;
@@ -234,7 +280,8 @@ export class RunState implements ShopRunApi {
 
   resolveBoardAfterManualDestruction(): void {
     const snap = this.snapSystem.resolve(this.board);
-    this.resolveBoardAfterMatches(snap);
+    const snapSeeds = snap.movedIndices.map((move) => move.to);
+    this.resolveBoardAfterMatches(snap, snapSeeds);
     this.checkEnemyDefeated();
   }
 
@@ -251,12 +298,13 @@ export class RunState implements ShopRunApi {
     };
   }
 
-  private resolveBoardAfterMatches(initialSnap?: IslandSnapResult): void {
+  private resolveBoardAfterMatches(initialSnap?: IslandSnapResult, seedIndices?: readonly number[]): void {
     let totalRemoved = 0, totalScore = 0, totalDamage = 0, chainsResolved = 0;
     let lastSnap = initialSnap;
     let hardKnockdown = false;
     let poiseBlocked = false;
     const allRemovedIndices: number[] = [];
+    let currentSeeds: readonly number[] | undefined = seedIndices;
 
     if (initialSnap && initialSnap.clustersMoved > 0) {
       const snapDamage = this.applySnapDamage(initialSnap);
@@ -266,7 +314,7 @@ export class RunState implements ShopRunApi {
     }
 
     for (let chain = 1; chain <= this.config.maxChains; chain++) {
-      const match = this.matchSystem.resolve(this.board);
+      const match = this.matchSystem.resolve(this.board, currentSeeds);
       if (match.removed <= 0) break;
       allRemovedIndices.push(...match.removedIndices);
       chainsResolved = chain;
@@ -288,11 +336,15 @@ export class RunState implements ShopRunApi {
         hardKnockdown ||= snapDamage.hardKnockdown;
         poiseBlocked ||= snapDamage.poiseBlocked;
       }
+
+      const nextSeeds = lastSnap.movedIndices.map((move) => move.to);
+      if (nextSeeds.length === 0) break;
+      currentSeeds = nextSeeds;
       if (this.enemy.hp <= 0) break;
     }
 
     if (totalRemoved > 0 || (initialSnap && initialSnap.clustersMoved > 0)) {
-      const status = hardKnockdown ? ' HARD KNOCKDOWN +1 turn delay.' : poiseBlocked ? ' Poise absorbed knockdown.' : '';
+      const status = hardKnockdown ? ' HARD KNOCKDOWN +1 move delay.' : poiseBlocked ? ' Poise absorbed knockdown.' : '';
       this.lastAction = {
         text: `Chain ${Math.max(1, chainsResolved)} cleared ${totalRemoved} blocks, +${totalScore}, ${totalDamage} damage.${status}`,
         removed: totalRemoved,
@@ -300,7 +352,8 @@ export class RunState implements ShopRunApi {
         snap: lastSnap,
         removedIndices: allRemovedIndices,
         hardKnockdown,
-        poiseBlocked
+        poiseBlocked,
+        playerAttack: totalDamage > 0
       };
       this.addLog(this.lastAction.text);
     }
@@ -318,7 +371,7 @@ export class RunState implements ShopRunApi {
         this.enemy.poiseTurns = 1;
         this.poiseAppliedThisTurn = true;
         hardKnockdown = true;
-        this.addLog(`CRITICAL SNAP! ${this.enemy.name} knocked down (+1 turn delay).`);
+        this.addLog(`CRITICAL SNAP! ${this.enemy.name} knocked down (+1 move delay).`);
       } else {
         poiseBlocked = true;
         this.addLog(`${this.enemy.name}'s Poise absorbed the knockdown.`);
@@ -328,34 +381,65 @@ export class RunState implements ShopRunApi {
     return { damage, hardKnockdown, poiseBlocked };
   }
 
-  private consumeMove(prefix: string, autoEndTurn: boolean): void {
+  private consumeMove(prefix: string): void {
     this.movesLeft = Math.max(0, this.movesLeft - 1);
-    this.lastAction = { text: `${prefix} ${this.movesLeft} moves left.`, removed: 0, chain: 0, removedIndices: [] };
-    if (autoEndTurn && this.movesLeft <= 0) this.endPlayerTurn();
+    this.lastAction = { text: `${prefix} ${this.movesLeft} moves left. ${this.enemy.name} attacks in ${this.enemy.attackTimer} moves.`, removed: 0, chain: 0, removedIndices: [] };
   }
 
-  private endPlayerTurn(): void {
+  private advanceEnemyAfterPlayerMove(): void {
+    if (this.phase !== 'playing') return;
+    this.enemy.attackTimer = Math.max(0, this.enemy.attackTimer - 1);
+
+    if (this.enemy.attackTimer <= 0) {
+      this.resolveEnemyAttackNow(false);
+    } else {
+      const message = `${this.enemy.name} attacks in ${this.enemy.attackTimer} moves.`;
+      this.addLog(message);
+      if (this.lastAction.removed <= 0 && !this.lastAction.playerAttack && !this.lastAction.invalidPlacement) {
+        this.lastAction = { text: `${message} ${this.movesLeft} moves left.`, removed: 0, chain: 0, removedIndices: [] };
+      }
+    }
+
+    if (this.phase === 'playing' && this.movesLeft <= 0) this.refreshMoveBatch();
+  }
+
+  private resolveEnemyAttackNow(forced: boolean): void {
     if (this.phase !== 'playing') return;
     const poiseWasAppliedThisTurn = this.poiseAppliedThisTurn;
-    this.enemy.attackTimer--;
-    if (this.enemy.attackTimer <= 0) {
-      const attack = applyEnemyAttack(this.heroes, this.enemy, this.frontlineIndex);
+    const attack = applyEnemyAttack(this.heroes, this.enemy, this.frontlineIndex);
+    const growthChance = this.currentCoreGrowthChance();
+    let coreGrew = false;
+    let text = `${forced ? 'Forced: ' : ''}${attack.text}`;
+
+    if (this.rng.next() < growthChance) {
       const growth = expandStaticCore(this.board, this.enemy.growthAmount);
-      this.enemy.attackTimer = this.enemy.attackEveryTurns;
-      this.lastAction = { text: `${attack.text} Static core expanded ${growth.oldRadius} -> ${growth.newRadius}.`, removed: 0, chain: 0, removedIndices: [] };
-      this.addLog(this.lastAction.text);
-      this.resolveBoardAfterManualDestruction();
+      coreGrew = true;
+      text += ` Core expanded ${growth.oldRadius} -> ${growth.newRadius}.`;
     } else {
-      this.lastAction = { text: `${this.enemy.name} attacks in ${this.enemy.attackTimer}.`, removed: 0, chain: 0, removedIndices: [] };
-      this.addLog(this.lastAction.text);
+      text += ` Core held stable (${Math.round(growthChance * 100)}% growth risk).`;
     }
-    this.movesLeft = this.config.movesPerTurn + this.extraMovesNextTurn;
-    this.extraMovesNextTurn = 0;
-    this.cacheUsedThisTurn = false;
+
+    this.enemy.attackTimer = this.enemy.attackEveryTurns;
+    this.lastAction = { text, removed: 0, chain: 0, removedIndices: [], enemyAttack: true, coreGrew };
+    this.addLog(text);
+
     if (!poiseWasAppliedThisTurn && this.enemy.poiseTurns > 0) this.enemy.poiseTurns--;
     this.poiseAppliedThisTurn = false;
-    this.checkEnemyDefeated();
     this.checkLossConditions();
+  }
+
+  private refreshMoveBatch(): void {
+    this.movesLeft = Math.max(1, this.config.movesPerTurn + this.extraMovesNextTurn);
+    this.extraMovesNextTurn = 0;
+    this.cacheUsedThisTurn = false;
+    this.addLog(`Moves refreshed: ${this.movesLeft}. Cache is available again.`);
+  }
+
+  private currentCoreGrowthChance(): number {
+    const min = clamp01(this.config.enemyCoreGrowthChanceMin ?? 0.10);
+    const max = Math.max(min, clamp01(this.config.enemyCoreGrowthChanceMax ?? 0.25));
+    const waveRamp = Math.min(1, Math.max(0, (this.wave - 1) / 10));
+    return min + (max - min) * waveRamp;
   }
 
   private checkEnemyDefeated(): void {
@@ -363,9 +447,16 @@ export class RunState implements ShopRunApi {
     this.enemiesDefeated++;
     const bounty = 400 + this.wave * 80;
     this.points += bounty;
-    this.phase = 'shop';
+    this.phase = 'ko';
     this.rerollsUsedThisShop = 0;
-    this.lastAction = { text: `${this.enemy.name} banished. +${bounty} bodega points.`, removed: 0, chain: 0, removedIndices: [] };
+    const previous = this.lastAction;
+    this.lastAction = {
+      ...previous,
+      text: `${this.enemy.name} BANISHED. +${bounty} bodega points. Darkweb Bodega connecting...`,
+      enemyDefeated: true,
+      playerAttack: true,
+      removedIndices: previous.removedIndices ?? []
+    };
     this.addLog(this.lastAction.text);
   }
 
@@ -393,6 +484,8 @@ function containmentExceeded(board: BreachBoard): boolean {
   }
   return false;
 }
+
+function clamp01(value: number): number { return Math.max(0, Math.min(1, value)); }
 
 function rollSynergy(heroes: readonly HeroState[], rng: Mulberry32): RunSynergy {
   const ids = new Set(heroes.map((h) => h.id));

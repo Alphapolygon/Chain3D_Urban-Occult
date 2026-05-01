@@ -1,4 +1,4 @@
-import { chebyshevDistanceFromCenter, isOccupied, isStatic, makeStaticCoreCell, signNonZero } from './CellBits';
+import { chebyshevDistanceFromCenter, isOccupied, makeCorruptionCell, makeStaticCoreCell, signNonZero } from './CellBits';
 import type { BreachBoard } from './BreachBoard';
 
 export type CoreGrowthResult = {
@@ -15,12 +15,16 @@ export function expandStaticCore(board: BreachBoard, amount: number): CoreGrowth
   const displaced: number[] = [];
   const values: number[] = [];
 
+  // Only the newly-grown shell pushes existing blocks outward. Previous colored
+  // growth layers stay in place; empty holes inside the growth radius are filled
+  // below, but they do not trigger match checks by themselves.
   for (let i = 0; i < board.cellCount; i++) {
     const p = board.xyzOf(i);
     const dist = chebyshevDistanceFromCenter(p.x, p.y, p.z, board.center);
-    if (dist > newRadius) continue;
+    if (dist <= oldRadius || dist > newRadius) continue;
+
     const cell = board.cells[i];
-    if (isOccupied(cell) && !isStatic(cell)) {
+    if (isOccupied(cell)) {
       displaced.push(i);
       values.push(cell);
       board.cells[i] = 0;
@@ -34,20 +38,27 @@ export function expandStaticCore(board: BreachBoard, amount: number): CoreGrowth
     board.cells[target] = values[i];
   }
 
-  let createdStaticBlocks = 0;
+  let createdGrowthBlocks = 0;
   for (let i = 0; i < board.cellCount; i++) {
     const p = board.xyzOf(i);
     const dist = chebyshevDistanceFromCenter(p.x, p.y, p.z, board.center);
-    if (dist <= newRadius) {
-      if (board.cells[i] !== makeStaticCoreCell()) createdStaticBlocks++;
+
+    if (dist === 0) {
+      if (board.cells[i] !== makeStaticCoreCell()) createdGrowthBlocks++;
       board.cells[i] = makeStaticCoreCell();
+      continue;
+    }
+
+    if (dist <= newRadius && board.cells[i] === 0) {
+      board.cells[i] = makeCorruptionCell(board.randomColor());
+      createdGrowthBlocks++;
     }
   }
 
   board.coreRadius = newRadius;
   board.growActiveRadius(amount);
   if (!success) board.containmentFailure = true;
-  return { success, oldRadius, newRadius, displacedBlocks: displaced.length, createdStaticBlocks };
+  return { success, oldRadius, newRadius, displacedBlocks: displaced.length, createdStaticBlocks: createdGrowthBlocks };
 }
 
 export function shrinkStaticCore(board: BreachBoard, amount: number): CoreGrowthResult {
@@ -62,6 +73,8 @@ export function shrinkStaticCore(board: BreachBoard, amount: number): CoreGrowth
       removed++;
     }
   }
+  const centerIndex = board.index(board.center, board.center, board.center);
+  board.cells[centerIndex] = makeStaticCoreCell();
   board.coreRadius = newRadius;
   return { success: true, oldRadius, newRadius, displacedBlocks: 0, createdStaticBlocks: -removed };
 }

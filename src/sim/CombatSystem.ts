@@ -21,7 +21,8 @@ export function createHeroState(def: HeroDefinition): HeroState {
 export function createEnemyState(def: EnemyDefinition, wave: number): EnemyState {
   const maxHp = Math.round(def.baseHp + wave * 42 + Math.pow(wave, 1.22) * 18);
   const damage = Math.round(def.baseDamage + wave * 6 + Math.floor(wave / 4) * 9);
-  return { ...def, wave, hp: maxHp, maxHp, damage, attackTimer: def.attackEveryTurns, poiseTurns: 0 };
+  const attackCadence = Math.max(5, def.attackEveryTurns | 0);
+  return { ...def, attackEveryTurns: attackCadence, wave, hp: maxHp, maxHp, damage, attackTimer: attackCadence, poiseTurns: 0 };
 }
 
 export function damageEnemy(enemy: EnemyState, amount: number): number {

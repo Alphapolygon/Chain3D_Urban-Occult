@@ -1,4 +1,4 @@
-import { colorOf, isMatchable } from './CellBits';
+import { DIRECTIONS, colorOf, isMatchable } from './CellBits';
 import type { BreachBoard } from './BreachBoard';
 
 export type MatchResult = {
@@ -11,21 +11,41 @@ export type MatchResult = {
 export class MatchSystem {
   readonly removeMask: Uint8Array;
   readonly colorCounts: Int32Array;
+
+  private readonly visitStamp: Int32Array;
+  private readonly queue: Int32Array;
+  private readonly cluster: Int32Array;
   private readonly minimum: number;
+  private stamp = 1;
 
   constructor(cellCount: number, colorCount: number, minimum = 3) {
     this.removeMask = new Uint8Array(cellCount);
+    this.visitStamp = new Int32Array(cellCount);
+    this.queue = new Int32Array(cellCount);
+    this.cluster = new Int32Array(cellCount);
     this.colorCounts = new Int32Array(Math.max(16, colorCount + 1));
     this.minimum = Math.max(3, minimum | 0);
   }
 
-  resolve(board: BreachBoard): MatchResult {
+  /**
+   * Resolves seeded 3D cluster matches.
+   *
+   * This intentionally does not scan the whole board. A connected color blob only
+   * clears when one of the seed cells belongs to it, e.g. the block the player
+   * just placed or a block that moved during Island Snap. Old blobs can be huge,
+   * but they stay dormant until touched by a seed of the same color.
+   */
+  resolve(board: BreachBoard, seedIndices?: readonly number[]): MatchResult {
     this.removeMask.fill(0);
     this.colorCounts.fill(0);
 
-    this.scanAxis(board, 1, 0, 0);
-    this.scanAxis(board, 0, 1, 0);
-    this.scanAxis(board, 0, 0, 1);
+    if (!seedIndices || seedIndices.length === 0) {
+      return { removed: 0, dominantColor: 0, colorCounts: this.colorCounts, removedIndices: [] };
+    }
+
+    for (const seed of seedIndices) {
+      this.tryMarkConnectedGroup(board, seed | 0);
+    }
 
     let removed = 0;
     let dominantColor = 0;
@@ -34,11 +54,13 @@ export class MatchSystem {
 
     for (let i = 0; i < board.cellCount; i++) {
       if (this.removeMask[i] === 0) continue;
+
       const color = colorOf(board.cells[i]);
       board.cells[i] = 0;
       this.colorCounts[color]++;
       removed++;
       removedIndices.push(i);
+
       if (this.colorCounts[color] > dominantCount) {
         dominantColor = color;
         dominantCount = this.colorCounts[color];
@@ -48,44 +70,52 @@ export class MatchSystem {
     return { removed, dominantColor, colorCounts: this.colorCounts, removedIndices };
   }
 
-  private scanAxis(board: BreachBoard, dx: number, dy: number, dz: number): void {
-    const s = board.maxSize;
-    for (let z = 0; z < s; z++) for (let y = 0; y < s; y++) for (let x = 0; x < s; x++) {
-      const px = x - dx, py = y - dy, pz = z - dz;
-      if (board.inBounds(px, py, pz)) continue;
+  private tryMarkConnectedGroup(board: BreachBoard, seed: number): void {
+    if (!board.inBoundsIndex(seed)) return;
+    if (this.removeMask[seed] !== 0) return;
 
-      let runColor = 0;
-      let runStart = -1;
-      let runLength = 0;
-      let cx = x, cy = y, cz = z;
+    const seedCell = board.cells[seed];
+    if (!isMatchable(seedCell)) return;
 
-      while (board.inBounds(cx, cy, cz)) {
-        const index = board.index(cx, cy, cz);
-        const cell = board.cells[index];
-        const color = isMatchable(cell) ? colorOf(cell) : 0;
+    const targetColor = colorOf(seedCell);
+    const stamp = this.nextStamp();
 
-        if (color !== 0 && color === runColor) {
-          runLength++;
-        } else {
-          this.markRun(board, runStart, dx, dy, dz, runLength);
-          runColor = color;
-          runStart = color === 0 ? -1 : index;
-          runLength = color === 0 ? 0 : 1;
-        }
+    let head = 0;
+    let tail = 0;
+    let count = 0;
 
-        cx += dx; cy += dy; cz += dz;
+    this.visitStamp[seed] = stamp;
+    this.queue[tail++] = seed;
+
+    while (head < tail) {
+      const index = this.queue[head++];
+      this.cluster[count++] = index;
+
+      for (const direction of DIRECTIONS) {
+        const next = board.addIndex(index, direction.x, direction.y, direction.z);
+        if (next < 0 || this.visitStamp[next] === stamp || this.removeMask[next] !== 0) continue;
+
+        const cell = board.cells[next];
+        if (!isMatchable(cell) || colorOf(cell) !== targetColor) continue;
+
+        this.visitStamp[next] = stamp;
+        this.queue[tail++] = next;
       }
-      this.markRun(board, runStart, dx, dy, dz, runLength);
+    }
+
+    if (count < this.minimum) return;
+
+    for (let i = 0; i < count; i++) {
+      this.removeMask[this.cluster[i]] = 1;
     }
   }
 
-  private markRun(board: BreachBoard, start: number, dx: number, dy: number, dz: number, length: number): void {
-    if (start < 0 || length < this.minimum) return;
-    let index = start;
-    for (let i = 0; i < length; i++) {
-      this.removeMask[index] = 1;
-      index = board.addIndex(index, dx, dy, dz);
-      if (index < 0) break;
+  private nextStamp(): number {
+    this.stamp++;
+    if (this.stamp >= 0x3fffffff) {
+      this.visitStamp.fill(0);
+      this.stamp = 1;
     }
+    return this.stamp;
   }
 }

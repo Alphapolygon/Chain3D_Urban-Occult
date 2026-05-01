@@ -1,15 +1,15 @@
 import type { EnemyState } from '../sim/CombatSystem';
-import type { LastActionReport, RunSynergy } from '../sim/RunState';
+import type { LastActionReport, RunPhase, RunSynergy } from '../sim/RunState';
 
 type EnemyPanelProps = {
-  enemy: EnemyState; wave: number; movesLeft: number; score: number; credits: number; enemiesDefeated: number;
+  phase: RunPhase; enemy: EnemyState; wave: number; movesLeft: number; score: number; credits: number; enemiesDefeated: number;
   occupiedBlocks: number; coreRadius: number; synergy: RunSynergy; lastAction: LastActionReport;
   onForceAttack: () => void; onGrowCore1: () => void; onGrowCore2: () => void;
 };
 
 export function EnemyPanel(props: EnemyPanelProps) {
   const hpPct = props.enemy.maxHp > 0 ? (props.enemy.hp / props.enemy.maxHp) * 100 : 0;
-  const statusClass = props.lastAction.hardKnockdown ? 'knockdown' : props.enemy.poiseTurns > 0 ? 'poise' : '';
+  const statusClass = props.phase === 'ko' || props.lastAction.enemyDefeated ? 'enemy-ko' : props.lastAction.hardKnockdown ? 'knockdown' : props.enemy.poiseTurns > 0 ? 'poise' : props.lastAction.playerAttack ? 'enemy-hit' : '';
   return (
     <div className={`panel enemy-panel ${statusClass}`}>
       <div className="fighter-label">Nightmare</div>
@@ -18,9 +18,9 @@ export function EnemyPanel(props: EnemyPanelProps) {
       <div className="stat-grid">
         <span>Wave</span><strong>{props.wave}</strong>
         <span>Enemy HP</span><strong>{props.enemy.hp}/{props.enemy.maxHp}</strong>
-        <span>Attack</span><strong>{props.enemy.attackTimer} turns / {props.enemy.damage} dmg</strong>
-        <span>Poise</span><strong>{props.enemy.poiseTurns > 0 ? 'SUPER ARMOR' : 'open'}</strong>
-        <span>Moves</span><strong>{props.movesLeft}</strong>
+        <span>Attack</span><strong>{props.enemy.attackTimer} moves / {props.enemy.damage} dmg</strong>
+        <span>Status</span><strong>{props.phase === 'ko' ? 'BANISHED' : props.enemy.poiseTurns > 0 ? 'SUPER ARMOR' : 'open'}</strong>
+        <span>Player moves</span><strong>{props.movesLeft}</strong>
         <span>Score</span><strong>{props.score}</strong>
         <span>Bodega pts</span><strong>{props.credits}</strong>
         <span>Banished</span><strong>{props.enemiesDefeated}</strong>

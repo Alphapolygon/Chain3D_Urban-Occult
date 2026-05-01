@@ -1,4 +1,4 @@
-import { chebyshevDistanceFromCenter, CubeFace, FACE_NORMALS, isOccupied, LOCKED, makeColorCell, makeStaticCell, makeStaticCoreCell, type Vec3 } from './CellBits';
+import { chebyshevDistanceFromCenter, CubeFace, FACE_NORMALS, isOccupied, LOCKED, makeColorCell, makeCorruptionCell, makeStaticCell, makeStaticCoreCell, type Vec3 } from './CellBits';
 
 export type BreachBoardConfig = {
   maxSize: number; initialRadius: number; initialCoreRadius: number; fillPercent: number;
@@ -30,7 +30,8 @@ export class BreachBoard {
   generateInitialBreach(): void {
     for (let z = 0; z < this.maxSize; z++) for (let y = 0; y < this.maxSize; y++) for (let x = 0; x < this.maxSize; x++) {
       const distance = chebyshevDistanceFromCenter(x, y, z, this.center); const index = this.index(x, y, z);
-      if (distance <= this.coreRadius) { this.cells[index] = makeStaticCoreCell(); continue; }
+      if (distance === 0) { this.cells[index] = makeStaticCoreCell(); continue; }
+      if (distance <= this.coreRadius) { this.cells[index] = makeCorruptionCell(this.randomColor()); continue; }
       if (distance > this.activeRadius || this.rng.next() > this.config.fillPercent) continue;
       if (this.rng.next() < this.config.staticNoisePercent) { this.cells[index] = makeStaticCell(); continue; }
       const color = this.rng.int(1, this.colorCount + 1); const locked = this.rng.next() < this.config.lockedPercent ? LOCKED : 0;
