@@ -1,26 +1,26 @@
 {
-  "name": "chain3d-urban-occult-prototype-ts",
+  "name": "chain3d-urban-occult-web",
   "version": "0.1.0",
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "vite --host 0.0.0.0",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
-    "test": "vitest run"
+    "test": "vitest"
   },
   "dependencies": {
-    "@vitejs/plugin-react": "latest",
-    "react": "latest",
-    "react-dom": "latest",
-    "three": "latest",
-    "typescript": "latest",
-    "vite": "latest"
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
+    "three": "^0.180.0"
   },
   "devDependencies": {
-    "@types/react": "latest",
-    "@types/react-dom": "latest",
-    "@types/three": "latest",
-    "vitest": "latest"
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "@types/three": "^0.180.0",
+    "@vitejs/plugin-react": "^6.0.1",
+    "typescript": "^5.8.3",
+    "vite": "^7.1.4",
+    "vitest": "^2.1.8"
   }
 }
