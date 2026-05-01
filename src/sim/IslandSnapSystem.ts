@@ -1,10 +1,17 @@
 import { DIRECTIONS, isOccupied, isStatic, type Vec3 } from './CellBits';
 import type { BreachBoard } from './BreachBoard';
 
+export type IslandSnapMove = {
+  from: number;
+  to: number;
+  cell: number;
+};
+
 export type IslandSnapResult = {
   clustersMoved: number;
   cellsMoved: number;
   snapSteps: number;
+  movedIndices: IslandSnapMove[];
 };
 
 const MAX_DISTANCE = 0x3fff;
@@ -30,6 +37,7 @@ export class IslandSnapSystem {
     let clustersMoved = 0;
     let cellsMoved = 0;
     let snapSteps = 0;
+    const movedIndices: IslandSnapMove[] = [];
     this.stuck.fill(0);
 
     for (let pass = 0; pass < maxClusters; pass++) {
@@ -38,6 +46,9 @@ export class IslandSnapSystem {
       if (start < 0) break;
 
       const clusterCount = this.collectCluster(board, start);
+      const originalIndices = new Int32Array(clusterCount);
+      for (let i = 0; i < clusterCount; i++) originalIndices[i] = this.cluster[i];
+
       this.clearClusterFromBoard(board, clusterCount);
       this.buildDistanceField(board);
 
@@ -55,13 +66,18 @@ export class IslandSnapSystem {
       if (movedThisCluster) {
         clustersMoved++;
         cellsMoved += clusterCount;
+        for (let i = 0; i < clusterCount; i++) {
+          const from = originalIndices[i];
+          const to = this.cluster[i];
+          if (from !== to) movedIndices.push({ from, to, cell: this.clusterValues[i] });
+        }
         this.stuck.fill(0);
       } else {
         for (let i = 0; i < clusterCount; i++) this.stuck[this.cluster[i]] = 1;
       }
     }
 
-    return { clustersMoved, cellsMoved, snapSteps };
+    return { clustersMoved, cellsMoved, snapSteps, movedIndices };
   }
 
   private markAnchored(board: BreachBoard): void {

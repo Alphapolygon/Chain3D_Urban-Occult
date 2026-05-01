@@ -8,7 +8,7 @@ export type HeroDefinition = {
 export type HeroState = HeroDefinition & { hp: number; ap: number; shield: number; metaXp: number; };
 
 export type EnemyDefinition = { id: string; name: string; baseHp: number; baseDamage: number; attackEveryTurns: number; growthAmount: 1 | 2; };
-export type EnemyState = EnemyDefinition & { wave: number; hp: number; maxHp: number; damage: number; attackTimer: number; };
+export type EnemyState = EnemyDefinition & { wave: number; hp: number; maxHp: number; damage: number; attackTimer: number; poiseTurns: number; };
 
 export type AttackReport = { text: string; totalDamage: number; targetsHit: number; };
 
@@ -21,7 +21,7 @@ export function createHeroState(def: HeroDefinition): HeroState {
 export function createEnemyState(def: EnemyDefinition, wave: number): EnemyState {
   const maxHp = Math.round(def.baseHp + wave * 42 + Math.pow(wave, 1.22) * 18);
   const damage = Math.round(def.baseDamage + wave * 6 + Math.floor(wave / 4) * 9);
-  return { ...def, wave, hp: maxHp, maxHp, damage, attackTimer: def.attackEveryTurns };
+  return { ...def, wave, hp: maxHp, maxHp, damage, attackTimer: def.attackEveryTurns, poiseTurns: 0 };
 }
 
 export function damageEnemy(enemy: EnemyState, amount: number): number {

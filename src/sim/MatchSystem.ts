@@ -5,6 +5,7 @@ export type MatchResult = {
   removed: number;
   dominantColor: number;
   colorCounts: Int32Array;
+  removedIndices: number[];
 };
 
 export class MatchSystem {
@@ -29,6 +30,7 @@ export class MatchSystem {
     let removed = 0;
     let dominantColor = 0;
     let dominantCount = 0;
+    const removedIndices: number[] = [];
 
     for (let i = 0; i < board.cellCount; i++) {
       if (this.removeMask[i] === 0) continue;
@@ -36,13 +38,14 @@ export class MatchSystem {
       board.cells[i] = 0;
       this.colorCounts[color]++;
       removed++;
+      removedIndices.push(i);
       if (this.colorCounts[color] > dominantCount) {
         dominantColor = color;
         dominantCount = this.colorCounts[color];
       }
     }
 
-    return { removed, dominantColor, colorCounts: this.colorCounts };
+    return { removed, dominantColor, colorCounts: this.colorCounts, removedIndices };
   }
 
   private scanAxis(board: BreachBoard, dx: number, dy: number, dz: number): void {
