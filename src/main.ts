@@ -15,7 +15,9 @@ import { HeroPanel } from './ui/HeroPanel';
 import { EnemyPanel } from './ui/EnemyPanel';
 import { QueuePreview } from './ui/QueuePreview';
 import { DarkwebBodega } from './ui/DarkwebBodega';
+import { PostRunScreen } from './ui/PostRunScreen';
 import { SoundEngine } from './render/SoundEngine';
+import { buildEnvironment } from './render/Environment';
 
 const h = React.createElement;
 const sceneRoot = document.querySelector<HTMLDivElement>('#scene-root');
@@ -61,9 +63,7 @@ scene.add(rim);
 const cyanRim = new THREE.PointLight('#27e7ff', 90, 52);
 cyanRim.position.set(12, -2, 14);
 scene.add(cyanRim);
-const floorGrid = new THREE.GridHelper(40, 40, '#44308f', '#1d1832');
-floorGrid.position.y = -10;
-scene.add(floorGrid);
+const environmentParticles = buildEnvironment(scene);
 
 let breachRenderer = new BreachRenderer(scene, run.board.cellCount);
 const picking = new BreachPicking();
@@ -326,7 +326,15 @@ function App({ snapshot }: { snapshot: RunSnapshot }) {
     h(DarkwebBodega, { open: snapshot.shopOpen, credits: snapshot.credits, selectedCellIndex: snapshot.selectedCellIndex, rerollsUsedThisShop: snapshot.rerollsUsedThisShop, onBuy, onContinue: onContinueAfterShop }),
     snapshot.phase === 'enemy-turn' ? h('div', { className: 'enemy-turn-banner' }, 'ENEMY TURN') : null,
     snapshot.phase === 'ko' ? h('div', { className: 'ko-banner' }, 'NIGHTMARE BANISHED') : null,
-    snapshot.runOver ? h('div', { className: 'game-over' }, h('div', { className: 'panel', style: { maxWidth: 520 } }, h('div', { className: 'shop-title' }, 'Run Ended'), h('p', null, snapshot.lossReason), h('p', null, `Score ${snapshot.score}. Enemies defeated ${snapshot.enemiesDefeated}.`), h('button', { onClick: restartRun }, 'Quick Restart'))) : null
+    snapshot.runOver ? h(PostRunScreen, {
+      lossReason: snapshot.lossReason,
+      score: snapshot.score,
+      enemiesDefeated: snapshot.enemiesDefeated,
+      xpAwarded: snapshot.metaXpAwarded,
+      heroes: snapshot.heroes,
+      report: snapshot.metaProgressReport,
+      onRestart: restartRun
+    }) : null
   );
 }
 
@@ -375,6 +383,7 @@ function frame(): void {
   if (!paused) TWEEN.update();
   syncBreachInputEnabled();
   cameraRig.update();
+  if (!paused) environmentParticles.rotation.y += 0.0005;
   if (sceneDirty) { breachRenderer.syncFromBoard(run.board); sceneDirty = false; }
   if (!paused) breachRenderer.update();
   webglRenderer.render(scene, cameraRig.camera);

@@ -1,5 +1,6 @@
 import { enemyForWave } from '../data/enemies';
 import { getShopItem } from '../data/shopItems';
+import { applyMetaProgressToHeroDefinition, awardRunMetaProgress, emptyMetaProgressReport, type MetaProgressReport } from '../data/metaProgress';
 import type { BreachBoardConfig } from './BreachBoard';
 import { BreachBoard, Mulberry32 } from './BreachBoard';
 import { isDestructible, isOccupied } from './CellBits';
@@ -43,6 +44,7 @@ export type RunSnapshot = {
   heroes: HeroState[]; enemy: EnemyState; queue: number[]; cacheColor: number | null; cacheUsedThisTurn: boolean; frontlineIndex: number;
   wave: number; movesLeft: number; score: number; points: number; credits: number; enemiesDefeated: number; rerollsUsedThisShop: number;
   occupiedBlocks: number; coreRadius: number; selectedCellIndex: number; synergy: RunSynergy; lastAction: LastActionReport;
+  metaXpAwarded: number; metaProgressReport: MetaProgressReport;
 };
 
 export class BlockQueue {
@@ -103,6 +105,7 @@ export class RunState implements ShopRunApi {
   lastAction: LastActionReport = { text: 'Run not started.', removed: 0, chain: 0 };
   lossReason = '';
   metaXpAwarded = 0;
+  metaProgressReport: MetaProgressReport = emptyMetaProgressReport();
   private rng: Mulberry32;
   private poiseAppliedThisTurn = false;
   private pendingEnemyAttackForced = false;
@@ -115,7 +118,7 @@ export class RunState implements ShopRunApi {
     this.blockQueue = new BlockQueue(config.queueLength, config.board.colorCount, this.rng);
     this.matchSystem = new MatchSystem(this.board.cellCount, config.board.colorCount, config.matchMinimum);
     this.snapSystem = new IslandSnapSystem(this.board.cellCount);
-    this.heroes = this.draft.map(createHeroState);
+    this.heroes = this.draft.map((def) => createHeroState(applyMetaProgressToHeroDefinition(def)));
     this.enemy = createEnemyState(enemyForWave(1), 1);
     this.synergy = rollSynergy(this.heroes, this.rng);
   }
@@ -128,10 +131,10 @@ export class RunState implements ShopRunApi {
     this.rng = new Mulberry32(seed);
     this.board.reset(seed);
     this.blockQueue.setRng(this.rng);
-    this.heroes = this.draft.map(createHeroState);
+    this.heroes = this.draft.map((def) => createHeroState(applyMetaProgressToHeroDefinition(def)));
     this.phase = 'playing'; this.wave = 1; this.enemiesDefeated = 0; this.frontlineIndex = 0;
     this.movesLeft = this.config.movesPerTurn; this.score = 0; this.points = 0; this.matchedBlocks = 0;
-    this.extraMovesNextTurn = 0; this.selectedCellIndex = -1; this.lossReason = ''; this.metaXpAwarded = 0;
+    this.extraMovesNextTurn = 0; this.selectedCellIndex = -1; this.lossReason = ''; this.metaXpAwarded = 0; this.metaProgressReport = emptyMetaProgressReport();
     this.cacheColor = null; this.cacheUsedThisTurn = false; this.rerollsUsedThisShop = 0; this.poiseAppliedThisTurn = false; this.pendingEnemyAttackForced = false;
     this.enemy = createEnemyState(enemyForWave(1), 1);
     this.synergy = rollSynergy(this.heroes, this.rng);
@@ -306,7 +309,8 @@ export class RunState implements ShopRunApi {
       cacheUsedThisTurn: this.cacheUsedThisTurn, frontlineIndex: this.frontlineIndex, wave: this.wave, movesLeft: this.movesLeft, score: this.score,
       points: this.points, credits: this.points, enemiesDefeated: this.enemiesDefeated, rerollsUsedThisShop: this.rerollsUsedThisShop,
       occupiedBlocks: this.board.countOccupied(), coreRadius: this.board.coreRadius, selectedCellIndex: this.selectedCellIndex,
-      synergy: this.synergy, lastAction: this.lastAction
+      synergy: this.synergy, lastAction: this.lastAction,
+      metaXpAwarded: this.metaXpAwarded, metaProgressReport: this.metaProgressReport
     };
   }
 
@@ -498,16 +502,18 @@ export class RunState implements ShopRunApi {
   private checkLossConditions(): void {
     if (this.runOver) return;
     if (allHeroesDown(this.heroes)) {
-      this.phase = 'dead';
-      this.lossReason = 'All Cleaners were reduced to 0 HP.';
-      this.metaXpAwarded = awardMetaXp(this.heroes, this.score, this.enemiesDefeated);
-      this.addLog(`${this.lossReason} Meta-XP ${this.metaXpAwarded}.`);
+      this.finalizeRun('dead', 'All Cleaners were reduced to 0 HP.');
     } else if (this.board.containmentFailure || containmentExceeded(this.board)) {
-      this.phase = 'containment-failure';
-      this.lossReason = 'Containment failure: the Static core pushed the Breach past the grid boundary.';
-      this.metaXpAwarded = awardMetaXp(this.heroes, this.score, this.enemiesDefeated);
-      this.addLog(`${this.lossReason} Meta-XP ${this.metaXpAwarded}.`);
+      this.finalizeRun('containment-failure', 'Containment failure: the Static core pushed the Breach past the grid boundary.');
     }
+  }
+
+  private finalizeRun(phase: 'dead' | 'containment-failure', reason: string): void {
+    this.phase = phase;
+    this.lossReason = reason;
+    this.metaXpAwarded = awardMetaXp(this.heroes, this.score, this.enemiesDefeated);
+    this.metaProgressReport = awardRunMetaProgress(this.heroes, this.metaXpAwarded);
+    this.addLog(`${this.lossReason} Meta-XP ${this.metaXpAwarded}.`);
   }
 }
 

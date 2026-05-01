@@ -11,7 +11,12 @@ export enum ShopItemId {
   RerollQueue = 'reroll-queue',
   BombRadius1 = 'bomb-radius-1',
   CleanseLock = 'cleanse-lock',
-  ExtraMove = 'extra-move'
+  ExtraMove = 'extra-move',
+  CourierPatch = 'courier-patch',
+  SignalSpoof = 'signal-spoof',
+  DoorWard = 'door-ward',
+  SigilSpray = 'sigil-spray',
+  RemoteCharge = 'remote-charge'
 }
 
 export type ShopItemDefinition = {
@@ -86,6 +91,44 @@ function applyShopItem(run: ShopRunApi, item: ShopItemDefinition, target: number
     case ShopItemId.ExtraMove: {
       run.extraMovesNextTurn += 1;
       return '+1 move added to next turn.';
+    }
+    case ShopItemId.CourierPatch: {
+      let healed = 0;
+      for (const hero of run.heroes) {
+        if (hero.hp <= 0) continue;
+        const before = hero.hp;
+        hero.hp = Math.min(hero.maxHp, hero.hp + 24);
+        healed += hero.hp - before;
+      }
+      return healed > 0 ? `Courier patch kit restored ${healed} total HP.` : null;
+    }
+    case ShopItemId.SignalSpoof: {
+      run.blockQueue.rerollAll();
+      run.extraMovesNextTurn += 1;
+      return 'Signal spoof rerolled the queue and banked +1 move.';
+    }
+    case ShopItemId.DoorWard: {
+      const hero = run.heroes[run.frontlineIndex];
+      if (!hero || hero.hp <= 0) return null;
+      hero.shield += 90;
+      return `${hero.name} gained a heavy Door Ward.`;
+    }
+    case ShopItemId.SigilSpray: {
+      let charged = 0;
+      for (const hero of run.heroes) {
+        if (hero.hp <= 0) continue;
+        const before = hero.ap;
+        hero.ap = Math.min(hero.maxAp, hero.ap + 18);
+        charged += hero.ap - before;
+      }
+      return charged > 0 ? `Sigil spray charged ${charged} total AP.` : null;
+    }
+    case ShopItemId.RemoteCharge: {
+      if (target < 0) return null;
+      const removed = run.clearRadius1(target);
+      run.resolveBoardAfterManualDestruction();
+      run.extraMovesNextTurn += 1;
+      return `Remote breach charge removed ${removed} blocks and banked +1 move.`;
     }
     default: return null;
   }

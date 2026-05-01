@@ -13,9 +13,10 @@ export type EnemyState = EnemyDefinition & { wave: number; hp: number; maxHp: nu
 export type AttackReport = { text: string; totalDamage: number; targetsHit: number; };
 
 export function createHeroState(def: HeroDefinition): HeroState {
-  const level = def.metaLevel ?? 0;
-  const maxHp = def.maxHp + level * 8;
-  return { ...def, maxHp, hp: maxHp, ap: 0, shield: 0, metaXp: 0, baseDamage: def.baseDamage + level * 2 };
+  const level = Math.max(1, def.metaLevel ?? 1);
+  const bonusLevels = Math.max(0, level - 1);
+  const maxHp = def.maxHp + bonusLevels * 8;
+  return { ...def, metaLevel: level, maxHp, hp: maxHp, ap: 0, shield: 0, metaXp: 0, baseDamage: def.baseDamage + bonusLevels * 2 };
 }
 
 export function createEnemyState(def: EnemyDefinition, wave: number): EnemyState {

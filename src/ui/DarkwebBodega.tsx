@@ -1,4 +1,4 @@
-import { SHOP_ITEMS } from '../data/shopItems';
+import { getAvailableShopItems } from '../data/shopItems';
 import { ShopItemId } from '../sim/ShopSystem';
 
 type DarkwebBodegaProps = {
@@ -19,7 +19,7 @@ export function DarkwebBodega({ open, credits, selectedCellIndex, rerollsUsedThi
         <div className="shop-subtitle">Cleaner App // contraband cards // no refunds after manifestation</div>
         <div className="shop-status">Credits: <strong>{credits}</strong> / selected cell: <strong>{selectedCellIndex >= 0 ? selectedCellIndex : 'none'}</strong></div>
         <div className="shop-grid">
-          {SHOP_ITEMS.map((item) => {
+          {getAvailableShopItems().map((item) => {
             const needsCell = item.requiresTarget === 'cell';
             const rerollSpent = item.id === ShopItemId.RerollQueue && rerollsUsedThisShop >= 1;
             const disabled = credits < item.cost || (needsCell && selectedCellIndex < 0) || rerollSpent;
