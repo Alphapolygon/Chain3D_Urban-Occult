@@ -41,9 +41,13 @@ webglRenderer.outputColorSpace = THREE.SRGBColorSpace;
 sceneRoot.appendChild(webglRenderer.domElement);
 
 const cameraRig = new CameraRig(webglRenderer.domElement, () => { run.playerRotateBreach(); invalidate(false); });
-scene.add(new THREE.HemisphereLight('#d8cbff', '#15111f', 2.4));
-const key = new THREE.DirectionalLight('#ffffff', 3.2); key.position.set(8, 12, 10); scene.add(key);
-const rim = new THREE.PointLight('#ff42d0', 70, 45); rim.position.set(-10, 8, -12); scene.add(rim);
+scene.add(new THREE.HemisphereLight('#ffffff', '#15111f', 4.0));
+const key = new THREE.DirectionalLight('#ffffff', 5.0); 
+key.position.set(8, 12, 10); 
+scene.add(key);
+const rim = new THREE.PointLight('#ff42d0', 150, 60); // Stronger neon rim light
+rim.position.set(-10, 8, -12); 
+scene.add(rim);
 const floorGrid = new THREE.GridHelper(40, 40, '#31216d', '#181326'); floorGrid.position.y = -10; scene.add(floorGrid);
 
 const breachRenderer = new BreachRenderer(scene, run.board.cellCount);
@@ -65,14 +69,24 @@ function onGrowCore(amount: number): void { run.forceCoreGrowth(amount); invalid
 function App({ snapshot }: { snapshot: RunSnapshot }) {
   return h(React.Fragment, null,
     h('div', { className: 'hud' },
-      h('div', { className: 'top-row' },
-        h(EnemyPanel, { enemy: snapshot.enemy, wave: snapshot.wave, movesLeft: snapshot.movesLeft, score: snapshot.score, credits: snapshot.credits, enemiesDefeated: snapshot.enemiesDefeated, occupiedBlocks: snapshot.occupiedBlocks, coreRadius: snapshot.coreRadius, synergy: snapshot.synergy, lastAction: snapshot.lastAction, onForceAttack, onGrowCore1: () => onGrowCore(1), onGrowCore2: () => onGrowCore(2) }),
-        h(QueuePreview, { queue: snapshot.queue })
+      // LEFT SIDE: Heroes and Queue
+      h('div', { className: 'side-column left-side' },
+        h(QueuePreview, { queue: snapshot.queue }),
+        h(HeroPanel, { heroes: snapshot.heroes, frontlineIndex: snapshot.frontlineIndex, onActivate: onActivateHero })
       ),
-      h('div', { className: 'center-help' }, snapshot.shopOpen ? 'Shop is open. Click a Breach cell before buying cell-target items, then continue to the next monster.' : 'Click an exposed cube face to place the next block. Drag to rotate, but remember: rotation spends a move.'),
-      h('div', { className: 'bottom-row' },
-        h(HeroPanel, { heroes: snapshot.heroes, frontlineIndex: snapshot.frontlineIndex, onActivate: onActivateHero }),
-        h('div', { className: 'panel debug-row' }, h('span', null, `Selected cell: ${snapshot.selectedCellIndex >= 0 ? snapshot.selectedCellIndex : 'none'}`), h('button', { onClick: restartRun }, 'Restart'))
+      
+      // CENTER: Help text
+      h('div', { className: 'center-help' }, 
+        snapshot.shopOpen ? 'Shop is open. Click a Breach cell before buying cell-target items, then continue to the next monster.' : 'Click an exposed cube face to place the next block. Drag to rotate, but remember: rotation spends a move.'
+      ),
+      
+      // RIGHT SIDE: Enemy and Debug
+      h('div', { className: 'side-column right-side' },
+        h(EnemyPanel, { enemy: snapshot.enemy, wave: snapshot.wave, movesLeft: snapshot.movesLeft, score: snapshot.score, credits: snapshot.credits, enemiesDefeated: snapshot.enemiesDefeated, occupiedBlocks: snapshot.occupiedBlocks, coreRadius: snapshot.coreRadius, synergy: snapshot.synergy, lastAction: snapshot.lastAction, onForceAttack, onGrowCore1: () => onGrowCore(1), onGrowCore2: () => onGrowCore(2) }),
+        h('div', { className: 'panel debug-row' }, 
+          h('span', null, `Selected cell: ${snapshot.selectedCellIndex >= 0 ? snapshot.selectedCellIndex : 'none'}`), 
+          h('button', { onClick: restartRun }, 'Restart')
+        )
       )
     ),
     h(DarkwebBodega, { open: snapshot.shopOpen, credits: snapshot.credits, selectedCellIndex: snapshot.selectedCellIndex, onBuy, onContinue: onContinueAfterShop }),

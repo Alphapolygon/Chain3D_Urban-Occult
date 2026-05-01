@@ -17,7 +17,7 @@ export class BreachRenderer {
     this.cellIndexToInstanceId.fill(-1);
 
     const geometry = new THREE.BoxGeometry(0.94, 0.94, 0.94);
-    const material = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.42, metalness: 0.12, emissive: new THREE.Color('#12081c'), emissiveIntensity: 0.35 });
+    const material = new THREE.MeshStandardMaterial({ roughness: 0.2, metalness: 0.1, emissive: new THREE.Color('#2a1b42'), emissiveIntensity: 0.6 });
     this.mesh = new THREE.InstancedMesh(geometry, material, maxInstances);
     this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     this.mesh.frustumCulled = false;
