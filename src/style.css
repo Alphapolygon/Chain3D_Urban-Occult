@@ -1,0 +1,32 @@
+:root { font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #f8f7ff; background: #05040b; }
+* { box-sizing: border-box; }
+html, body, #scene-root, #ui-root { width: 100%; height: 100%; margin: 0; overflow: hidden; }
+#scene-root canvas { display: block; }
+#ui-root { position: fixed; inset: 0; pointer-events: none; }
+.hud { position: fixed; inset: 0; display: grid; grid-template-rows: auto 1fr auto; padding: 18px; gap: 12px; pointer-events: none; }
+.top-row, .bottom-row { display: flex; justify-content: space-between; align-items: stretch; gap: 12px; }
+.panel { pointer-events: auto; background: rgba(8,7,17,.78); border: 1px solid rgba(141,102,255,.34); border-radius: 18px; padding: 12px; backdrop-filter: blur(14px); box-shadow: 0 0 32px rgba(91,49,255,.16), inset 0 0 20px rgba(255,255,255,.03); }
+.enemy-panel { min-width: 320px; }
+.enemy-name, .shop-title { font-weight: 900; letter-spacing: .08em; text-transform: uppercase; color: #ff49d8; }
+.stat-grid { display: grid; grid-template-columns: repeat(2, auto); gap: 6px 14px; font-size: 13px; color: rgba(255,255,255,.8); margin-top: 8px; }
+.hero-panel { display: flex; gap: 10px; align-items: stretch; }
+.hero-card { width: 174px; border-radius: 14px; padding: 10px; background: linear-gradient(180deg, rgba(255,255,255,.08), rgba(255,255,255,.025)); border: 1px solid rgba(255,255,255,.12); }
+.hero-card.frontline { border-color: rgba(255,222,86,.95); box-shadow: 0 0 22px rgba(255,222,86,.24); }
+.hero-card.down { filter: grayscale(.8); opacity: .55; }
+.hero-name { font-weight: 900; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hero-role { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: rgba(255,255,255,.58); }
+.bar { height: 8px; border-radius: 999px; background: rgba(255,255,255,.12); overflow: hidden; margin-top: 7px; }
+.bar > div { height: 100%; border-radius: inherit; background: linear-gradient(90deg, #ff41cf, #8dfcff); }
+.hp > div { background: linear-gradient(90deg, #ff375f, #ffd166); }
+button { border: 0; border-radius: 12px; background: linear-gradient(135deg,#ff42d0,#6b6cff); color: #fff; font-weight: 900; padding: 8px 10px; cursor: pointer; box-shadow: 0 8px 22px rgba(84,75,255,.25); }
+button:disabled { opacity: .35; cursor: not-allowed; filter: grayscale(.6); }
+.queue { display: flex; gap: 8px; align-items: center; }
+.queue-block { width: 38px; height: 38px; border-radius: 12px; border: 1px solid rgba(255,255,255,.28); box-shadow: 0 0 18px currentColor; }
+.center-help { align-self: center; justify-self: center; pointer-events: none; color: rgba(255,255,255,.74); text-align: center; max-width: 500px; line-height: 1.4; text-shadow: 0 1px 3px #000; }
+.shop-overlay, .game-over { position: fixed; inset: 0; display: grid; place-items: center; background: rgba(0,0,0,.58); pointer-events: auto; }
+.shop-window { width: min(900px, calc(100vw - 36px)); max-height: calc(100vh - 36px); overflow: auto; }
+.shop-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 10px; margin-top: 12px; }
+.shop-item { text-align: left; padding: 12px; border-radius: 14px; border: 1px solid rgba(255,255,255,.12); background: rgba(255,255,255,.055); }
+.shop-item-name { font-weight: 900; }
+.shop-item-desc { color: rgba(255,255,255,.68); font-size: 13px; margin: 6px 0 10px; }
+.debug-row { pointer-events: auto; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 12px; color: rgba(255,255,255,.7); }
