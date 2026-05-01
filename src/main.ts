@@ -47,7 +47,10 @@ webglRenderer.outputColorSpace = THREE.SRGBColorSpace;
 sceneRoot.appendChild(webglRenderer.domElement);
 
 let speedMode = false;
-const cameraRig = new CameraRig(webglRenderer.domElement, () => { if (run.playerRotateBreach()) { playLastActionVisuals(); invalidate(true); } });
+const cameraRig = new CameraRig(webglRenderer.domElement, () => {
+  if (!canInteractWithBreach()) return;
+  if (run.playerRotateBreach()) { playLastActionVisuals(); invalidate(true); }
+});
 scene.add(new THREE.HemisphereLight('#ffffff', '#15111f', 4.0));
 const key = new THREE.DirectionalLight('#ffffff', 5.0);
 key.position.set(8, 12, 10);
@@ -78,6 +81,13 @@ const MIN_TEXT_DISPLAY_MS = 1000;
 const ENEMY_TURN_DELAY_MS = 1080;
 const KO_TO_SHOP_DELAY_MS = 1500;
 
+function canInteractWithBreach(): boolean {
+  return run.phase === 'playing' && !run.shopOpen && !run.runOver;
+}
+
+function syncBreachInputEnabled(): void {
+  cameraRig.controls.enabled = canInteractWithBreach();
+}
 
 // --- PARTICLE SYSTEM ---
 const particleGroup = new THREE.Group();
@@ -292,7 +302,7 @@ function App({ snapshot }: { snapshot: RunSnapshot }) {
     : snapshot.phase === 'enemy-turn'
       ? 'ENEMY TURN. Brace for impact.'
       : snapshot.shopOpen
-        ? 'Shop is open. Click a Breach cell before buying cell-target items, then continue to the next monster.'
+        ? 'Shop is open. Breach input is locked until you continue to the next monster.'
         : 'Click an exposed cube face to place the next block. Drag to rotate, but remember: rotation spends a move.';
 
   return h(React.Fragment, null,
@@ -320,9 +330,23 @@ function App({ snapshot }: { snapshot: RunSnapshot }) {
   );
 }
 
-webglRenderer.domElement.addEventListener('pointerdown', (event: PointerEvent) => { sfx.init(); pointerDownX = event.clientX; pointerDownY = event.clientY; });
+webglRenderer.domElement.addEventListener('pointerdown', (event: PointerEvent) => {
+  sfx.init();
+  pointerDownX = event.clientX;
+  pointerDownY = event.clientY;
+  syncBreachInputEnabled();
+});
+
 webglRenderer.domElement.addEventListener('pointerup', (event: PointerEvent) => {
   if (Math.hypot(event.clientX - pointerDownX, event.clientY - pointerDownY) > 5) return;
+
+  // Hard gate all Breach interaction while shop, KO, enemy-turn, or game-over UI is active.
+  // This prevents clicks through overlays from selecting or placing blocks on the cube.
+  if (!canInteractWithBreach()) {
+    syncBreachInputEnabled();
+    return;
+  }
+
   const pick = picking.pick(event, webglRenderer.domElement, cameraRig.camera, breachRenderer, run.board);
   if (!pick) {
     run.reportInvalidPlacement('No Breach block under cursor. Click a visible cube face.');
@@ -330,9 +354,8 @@ webglRenderer.domElement.addEventListener('pointerup', (event: PointerEvent) => 
     invalidate(false);
     return;
   }
+
   run.selectCell(pick.cellIndex);
-  const snapshot = run.getSnapshot();
-  if (snapshot.phase !== 'playing' || snapshot.shopOpen || snapshot.runOver) { invalidate(false); return; }
   if (pick.placementIndex >= 0) {
     if (!run.playerPlaceAtIndex(pick.placementIndex) && pick.reason) run.reportInvalidPlacement(pick.reason);
     playLastActionVisuals();
@@ -350,6 +373,7 @@ function frame(): void {
   requestAnimationFrame(frame);
   const paused = performance.now() < hitStopUntil;
   if (!paused) TWEEN.update();
+  syncBreachInputEnabled();
   cameraRig.update();
   if (sceneDirty) { breachRenderer.syncFromBoard(run.board); sceneDirty = false; }
   if (!paused) breachRenderer.update();
