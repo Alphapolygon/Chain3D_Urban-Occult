@@ -4,31 +4,54 @@ import type { LastActionReport } from '../sim/RunState';
 
 type HeroPanelProps = { heroes: readonly HeroState[]; frontlineIndex: number; onActivate: (heroIndex: number) => void; lastAction?: LastActionReport; };
 
+function initials(name: string): string {
+  return name.replace(/^The\s+/i, '').split(/\s+/).map((part) => part[0] ?? '').join('').slice(0, 2).toUpperCase();
+}
+
 export function HeroPanel({ heroes, frontlineIndex, onActivate, lastAction }: HeroPanelProps) {
   const enemyHitClass = lastAction?.enemyAttack ? 'enemy-hit' : '';
+
   return (
-    <div className={`panel hero-panel ${enemyHitClass}`}>
-      <div className="fighter-label">Cleaners</div>
+    <div className={`hero-panel arcade-fighter-panel ${enemyHitClass}`}>
       {heroes.map((hero, index) => {
-        const hpPct = hero.maxHp > 0 ? (hero.hp / hero.maxHp) * 100 : 0;
         const apPct = hero.maxAp > 0 ? (hero.ap / hero.maxAp) * 100 : 0;
         const isFrontline = index === frontlineIndex;
         const down = hero.hp <= 0;
         const ready = !down && hero.ap >= hero.maxAp;
+        const color = colorToCss(hero.color);
+
         return (
-          <div key={hero.id} className={`hero-card ${isFrontline ? 'frontline' : ''} ${down ? 'down' : ''} ${ready ? 'power-ready' : ''}`}>
-            <div className="hero-card-main">
-              <div>
-                <div className="hero-name" style={{ color: colorToCss(hero.color) }}>{hero.name}</div>
-                <div className="hero-role">{hero.role}{isFrontline ? ' / frontline' : ''}</div>
-              </div>
-              <button className={ready ? 'ready-button' : ''} disabled={down || hero.ap < hero.maxAp} onClick={() => onActivate(index)}>{ready ? 'CAST' : 'Active'}</button>
+          <div key={hero.id} className={`fighter-hud ${isFrontline ? 'frontline' : ''} ${down ? 'down' : ''}`}>
+            <div className={`sprite-container ${ready ? 'power-ready-sprite' : ''}`}>
+              {hero.spriteUrl ? (
+                <img src={hero.spriteUrl} className="fighter-sprite" alt={hero.name} />
+              ) : (
+                <div className="fighter-sprite fallback-sprite hero-fallback-sprite" style={{ borderColor: color, color }}>
+                  {initials(hero.name)}
+                </div>
+              )}
             </div>
-            {ready ? <div className="power-ready-badge">SPECIAL READY</div> : null}
-            <div className="bar hp"><div style={{ width: `${hpPct}%` }} /></div>
-            <div className="hero-role">HP {hero.hp}/{hero.maxHp} {hero.shield > 0 ? `+${hero.shield} shield` : ''}</div>
-            <div className="bar ap"><div style={{ width: `${apPct}%` }} /></div>
-            <div className="hero-role">AP {hero.ap}/{hero.maxAp}</div>
+
+            <div className="fighter-hud-stats">
+              <div className="fighter-hud-header">
+                <span className="hero-name" style={{ color }}>
+                  {hero.name}{isFrontline ? ' [FRONT]' : ''}
+                </span>
+                <span className="hero-hp">HP {hero.hp}/{hero.maxHp}{hero.shield > 0 ? ` +${hero.shield}` : ''}</span>
+              </div>
+
+              <div className={`bar ap ${ready ? 'ap-ready' : ''}`}>
+                <div style={{ width: `${apPct}%`, background: color }} />
+              </div>
+
+              <button
+                className={`cast-btn ${ready ? 'ready-button' : ''}`}
+                disabled={down || hero.ap < hero.maxAp}
+                onClick={() => onActivate(index)}
+              >
+                {ready ? 'CAST SPECIAL' : `AP ${hero.ap}/${hero.maxAp}`}
+              </button>
+            </div>
           </div>
         );
       })}

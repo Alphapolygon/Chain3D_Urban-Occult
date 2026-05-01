@@ -7,29 +7,56 @@ type EnemyPanelProps = {
   onForceAttack: () => void; onGrowCore1: () => void; onGrowCore2: () => void;
 };
 
+function shortName(name: string): string {
+  return name.split(/\s+/).map((part) => part[0] ?? '').join('').slice(0, 2).toUpperCase();
+}
+
 export function EnemyPanel(props: EnemyPanelProps) {
-  const hpPct = props.enemy.maxHp > 0 ? (props.enemy.hp / props.enemy.maxHp) * 100 : 0;
-  const statusClass = props.phase === 'ko' || props.lastAction.enemyDefeated ? 'enemy-ko' : props.phase === 'enemy-turn' || props.lastAction.enemyTurn ? 'enemy-turn' : props.lastAction.hardKnockdown ? 'knockdown' : props.enemy.poiseTurns > 0 ? 'poise' : props.lastAction.playerAttack ? 'enemy-hit' : '';
+  const statusClass = props.phase === 'ko' || props.lastAction.enemyDefeated
+    ? 'enemy-ko'
+    : props.phase === 'enemy-turn' || props.lastAction.enemyTurn
+      ? 'enemy-turn'
+      : props.lastAction.hardKnockdown
+        ? 'knockdown'
+        : props.enemy.poiseTurns > 0
+          ? 'poise'
+          : props.lastAction.playerAttack
+            ? 'enemy-hit'
+            : '';
+  const isIncoming = props.phase === 'enemy-turn' || props.enemy.attackTimer === 0;
+
   return (
-    <div className={`panel enemy-panel ${statusClass}`}>
-      <div className="fighter-label">Nightmare</div>
-      <div className="enemy-name">{props.enemy.name}</div>
-      <div className="bar hp"><div style={{ width: `${hpPct}%` }} /></div>
-      <div className="stat-grid">
-        <span>Wave</span><strong>{props.wave}</strong>
-        <span>Enemy HP</span><strong>{props.enemy.hp}/{props.enemy.maxHp}</strong>
-        <span>Attack</span><strong>{props.phase === 'enemy-turn' ? 'INCOMING' : `${props.enemy.attackTimer} moves`} / {props.enemy.damage} dmg</strong>
-        <span>Status</span><strong>{props.phase === 'ko' ? 'BANISHED' : props.phase === 'enemy-turn' ? 'ENEMY TURN' : props.enemy.poiseTurns > 0 ? 'SUPER ARMOR' : 'open'}</strong>
-        <span>Player moves</span><strong>{props.movesLeft}</strong>
-        <span>Score</span><strong>{props.score}</strong>
-        <span>Bodega pts</span><strong>{props.credits}</strong>
-        <span>Banished</span><strong>{props.enemiesDefeated}</strong>
-        <span>Blocks</span><strong>{props.occupiedBlocks}</strong>
-        <span>Core radius</span><strong>{props.coreRadius}</strong>
+    <div className={`enemy-panel arcade-fighter-panel ${statusClass}`}>
+      <div className="sprite-container enemy-sprite-container">
+        {props.enemy.spriteUrl ? (
+          <img src={props.enemy.spriteUrl} className="fighter-sprite enemy-sprite" alt={props.enemy.name} />
+        ) : (
+          <div className="fighter-sprite fallback-sprite enemy-fallback-sprite">{shortName(props.enemy.name)}</div>
+        )}
+      </div>
+
+      <div className="fighter-hud boss-hud">
+        <div className="fighter-hud-header">
+          <span className="hero-name" style={{ color: '#ff49d8' }}>{props.enemy.name}</span>
+          <span className="hero-hp">HP {props.enemy.hp}/{props.enemy.maxHp}</span>
+        </div>
+
+        <div className={`boss-timer ${isIncoming ? 'incoming' : ''}`}>
+          {isIncoming ? 'ATTACK INCOMING' : `Attacks in ${props.enemy.attackTimer} moves`}
+        </div>
+      </div>
+
+      <div className="enemy-run-stats">
+        <span>Wave {props.wave}</span>
+        <span>Score {props.score}</span>
+        <span>Bodega {props.credits}</span>
+        <span>Banished {props.enemiesDefeated}</span>
+        <span>Blocks {props.occupiedBlocks}</span>
+        <span>Core {props.coreRadius}</span>
       </div>
       <div className="synergy-copy"><strong>{props.synergy.title}</strong><br />{props.synergy.description}</div>
       <div className="last-action">{props.lastAction.text}</div>
-      <div className="debug-row" style={{ marginTop: 10 }}>
+      <div className="debug-row boss-debug-row" style={{ marginTop: 10 }}>
         <button onClick={props.onForceAttack}>Force attack</button>
         <button onClick={props.onGrowCore1}>Core +1</button>
         <button onClick={props.onGrowCore2}>Core +2</button>

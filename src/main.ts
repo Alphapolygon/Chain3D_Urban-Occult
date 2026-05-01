@@ -6,6 +6,7 @@ import * as TWEEN from '@tweenjs/tween.js';
 import { BreachBoard } from './sim/BreachBoard';
 
 import { HEROES } from './data/heroes';
+import type { HeroDefinition } from './sim/CombatSystem';
 import { RunState, type LastActionReport, type RunConfig, type RunSnapshot } from './sim/RunState';
 import type { ShopItemId } from './sim/ShopSystem';
 import { BreachRenderer } from './render/BreachRenderer';
@@ -16,6 +17,7 @@ import { EnemyPanel } from './ui/EnemyPanel';
 import { QueuePreview } from './ui/QueuePreview';
 import { DarkwebBodega } from './ui/DarkwebBodega';
 import { PostRunScreen } from './ui/PostRunScreen';
+import { DraftScreen } from './ui/DraftScreen';
 import { SoundEngine } from './render/SoundEngine';
 import { buildEnvironment } from './render/Environment';
 
@@ -35,8 +37,9 @@ let runConfig: RunConfig = {
   enemyCoreGrowthChanceMax: 0.25
 };
 
-let run = new RunState(runConfig, HEROES.slice(0, 3));
-run.startRun();
+let draftedHeroes: HeroDefinition[] = HEROES.slice(0, 3);
+let gameStarted = false;
+let run = new RunState(runConfig, draftedHeroes);
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color('#080611');
@@ -49,10 +52,7 @@ webglRenderer.outputColorSpace = THREE.SRGBColorSpace;
 sceneRoot.appendChild(webglRenderer.domElement);
 
 let speedMode = false;
-const cameraRig = new CameraRig(webglRenderer.domElement, () => {
-  if (!canInteractWithBreach()) return;
-  if (run.playerRotateBreach()) { playLastActionVisuals(); invalidate(true); }
-});
+const cameraRig = new CameraRig(webglRenderer.domElement);
 scene.add(new THREE.HemisphereLight('#ffffff', '#15111f', 4.0));
 const key = new THREE.DirectionalLight('#ffffff', 5.0);
 key.position.set(8, 12, 10);
@@ -71,6 +71,11 @@ const root = createRoot(uiRoot);
 let sceneDirty = true;
 let pointerDownX = 0;
 let pointerDownY = 0;
+let lastPointerX = 0;
+let lastPointerY = 0;
+let pointerIsDown = false;
+let dragRotatedBreach = false;
+let dragExceededClickThreshold = false;
 let processedAction: LastActionReport | null = null;
 let hitStopUntil = 0;
 let koShopTimeout: number | null = null;
@@ -82,7 +87,7 @@ const ENEMY_TURN_DELAY_MS = 1080;
 const KO_TO_SHOP_DELAY_MS = 1500;
 
 function canInteractWithBreach(): boolean {
-  return run.phase === 'playing' && !run.shopOpen && !run.runOver;
+  return gameStarted && run.phase === 'playing' && !run.shopOpen && !run.runOver;
 }
 
 function syncBreachInputEnabled(): void {
@@ -91,7 +96,7 @@ function syncBreachInputEnabled(): void {
 
 // --- PARTICLE SYSTEM ---
 const particleGroup = new THREE.Group();
-scene.add(particleGroup);
+breachRenderer.group.add(particleGroup);
 const particleGeo = new THREE.BoxGeometry(1.0, 1.0, 1.0);
 const particleMat = new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 1, blending: THREE.AdditiveBlending, depthWrite: false });
 
@@ -255,10 +260,12 @@ function applyDebugConfig(newConfig: RunConfig): void {
   const maxSize = newConfig.board.maxSize % 2 === 0 ? newConfig.board.maxSize + 1 : newConfig.board.maxSize;
   const initialRadius = Math.min(newConfig.board.initialRadius, Math.floor(maxSize / 2) - 1);
   runConfig = { ...newConfig, board: { ...newConfig.board, maxSize, initialRadius } };
-  run = new RunState(runConfig, HEROES.slice(0, 3));
+  run = new RunState(runConfig, draftedHeroes);
   run.startRun();
+  gameStarted = true;
   breachRenderer.dispose(scene);
   breachRenderer = new BreachRenderer(scene, run.board.cellCount);
+  breachRenderer.group.add(particleGroup);
   processedAction = null;
   invalidate(true);
 }
@@ -286,7 +293,32 @@ function DebugMenu({ config, onApply, speed, onToggleSpeed, onClose }: { config:
 
 function invalidate(boardChanged = true): void { sceneDirty = sceneDirty || boardChanged; renderUi(); }
 function renderUi(): void { root.render(h(App, { snapshot: run.getSnapshot() })); }
-function restartRun(): void { clearKoShopTimer(); clearEnemyTurnTimer(); run.startRun((Date.now() ^ Math.floor(Math.random() * 0xffffffff)) >>> 0); processedAction = null; invalidate(true); }
+function startRunWithDraft(draft: HeroDefinition[]): void {
+  clearKoShopTimer();
+  clearEnemyTurnTimer();
+  draftedHeroes = draft.slice(0, 3);
+  if (draftedHeroes.length < 3) draftedHeroes = HEROES.slice(0, 3);
+  run = new RunState(runConfig, draftedHeroes);
+  run.startRun((Date.now() ^ Math.floor(Math.random() * 0xffffffff)) >>> 0);
+  gameStarted = true;
+  breachRenderer.dispose(scene);
+  breachRenderer = new BreachRenderer(scene, run.board.cellCount);
+  breachRenderer.group.add(particleGroup);
+  processedAction = null;
+  invalidate(true);
+}
+function restartRun(): void {
+  if (!gameStarted) { renderUi(); return; }
+  clearKoShopTimer(); clearEnemyTurnTimer();
+  run.startRun((Date.now() ^ Math.floor(Math.random() * 0xffffffff)) >>> 0);
+  processedAction = null; invalidate(true);
+}
+function returnToDraft(): void {
+  clearKoShopTimer(); clearEnemyTurnTimer();
+  gameStarted = false;
+  processedAction = null;
+  invalidate(true);
+}
 function onActivateHero(heroIndex: number): void { if (run.tryActivateHeroPower(heroIndex)) { playLastActionVisuals(); invalidate(true); } }
 function onSwapCache(): void { if (run.playerSwapCache()) invalidate(false); }
 function onBuy(itemId: ShopItemId): void { if (run.tryBuy(itemId)) { playLastActionVisuals(); invalidate(true); } else invalidate(false); }
@@ -297,13 +329,16 @@ function toggleSpeedMode(): void { speedMode = !speedMode; invalidate(false); }
 
 function App({ snapshot }: { snapshot: RunSnapshot }) {
   const [debugOpen, setDebugOpen] = React.useState(true);
+  if (!gameStarted) {
+    return h(DraftScreen, { heroes: HEROES, initialSelectedIds: draftedHeroes.map((hero) => hero.id), onStart: startRunWithDraft });
+  }
   const helpText = snapshot.phase === 'ko'
     ? 'K.O. Nightmare banished. Darkweb Bodega is connecting...'
     : snapshot.phase === 'enemy-turn'
       ? 'ENEMY TURN. Brace for impact.'
       : snapshot.shopOpen
         ? 'Shop is open. Breach input is locked until you continue to the next monster.'
-        : 'Click an exposed cube face to place the next block. Drag to rotate, but remember: rotation spends a move.';
+        : 'Click an exposed cube face to place the next block. Drag the Breach itself to rotate it; rotation spends a move.';
 
   return h(React.Fragment, null,
     debugOpen
@@ -333,7 +368,8 @@ function App({ snapshot }: { snapshot: RunSnapshot }) {
       xpAwarded: snapshot.metaXpAwarded,
       heroes: snapshot.heroes,
       report: snapshot.metaProgressReport,
-      onRestart: restartRun
+      onRestart: restartRun,
+      onDraft: returnToDraft
     }) : null
   );
 }
@@ -342,11 +378,48 @@ webglRenderer.domElement.addEventListener('pointerdown', (event: PointerEvent) =
   sfx.init();
   pointerDownX = event.clientX;
   pointerDownY = event.clientY;
+  lastPointerX = event.clientX;
+  lastPointerY = event.clientY;
+  pointerIsDown = true;
+  dragRotatedBreach = false;
+  dragExceededClickThreshold = false;
   syncBreachInputEnabled();
+  try { webglRenderer.domElement.setPointerCapture(event.pointerId); } catch { }
+});
+
+webglRenderer.domElement.addEventListener('pointermove', (event: PointerEvent) => {
+  if (!pointerIsDown || !canInteractWithBreach()) return;
+  const totalDistance = Math.hypot(event.clientX - pointerDownX, event.clientY - pointerDownY);
+  const dx = event.clientX - lastPointerX;
+  const dy = event.clientY - lastPointerY;
+  lastPointerX = event.clientX;
+  lastPointerY = event.clientY;
+
+  if (totalDistance <= 5 && !dragExceededClickThreshold) return;
+  dragExceededClickThreshold = true;
+  if (Math.abs(dx) + Math.abs(dy) <= 0) return;
+
+  breachRenderer.rotateByDrag(dx, dy);
+  dragRotatedBreach = true;
+  event.preventDefault();
 });
 
 webglRenderer.domElement.addEventListener('pointerup', (event: PointerEvent) => {
-  if (Math.hypot(event.clientX - pointerDownX, event.clientY - pointerDownY) > 5) return;
+  const totalDistance = Math.hypot(event.clientX - pointerDownX, event.clientY - pointerDownY);
+  const shouldTreatAsRotation = dragRotatedBreach || totalDistance > 5;
+  pointerIsDown = false;
+  try { webglRenderer.domElement.releasePointerCapture(event.pointerId); } catch { }
+
+  // Dragging rotates the Breach object itself. Commit the rotation as one move.
+  if (shouldTreatAsRotation) {
+    if (dragRotatedBreach && canInteractWithBreach() && run.playerRotateBreach()) {
+      playLastActionVisuals();
+      invalidate(false);
+    }
+    dragRotatedBreach = false;
+    dragExceededClickThreshold = false;
+    return;
+  }
 
   // Hard gate all Breach interaction while shop, KO, enemy-turn, or game-over UI is active.
   // This prevents clicks through overlays from selecting or placing blocks on the cube.
@@ -373,6 +446,12 @@ webglRenderer.domElement.addEventListener('pointerup', (event: PointerEvent) => 
     playLastActionVisuals();
     invalidate(false);
   }
+});
+webglRenderer.domElement.addEventListener('pointercancel', (event: PointerEvent) => {
+  pointerIsDown = false;
+  dragRotatedBreach = false;
+  dragExceededClickThreshold = false;
+  try { webglRenderer.domElement.releasePointerCapture(event.pointerId); } catch { }
 });
 
 window.addEventListener('resize', () => { webglRenderer.setSize(window.innerWidth, window.innerHeight); cameraRig.resize(window.innerWidth, window.innerHeight); });

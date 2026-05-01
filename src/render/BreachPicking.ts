@@ -22,7 +22,7 @@ export class BreachPicking {
     const cellIndex = renderer.cellIndexForInstance(hit.instanceId);
     if (cellIndex < 0) return null;
 
-    const normal = normalizeFaceNormal(hit.face.normal);
+    const normal = placementNormalFromHit(hit.point, renderer, board, cellIndex);
     const direct = board.addIndex(cellIndex, normal.x, normal.y, normal.z);
     if (direct >= 0 && board.isValidPlacementIndex(direct)) {
       return { cellIndex, placementIndex: direct, normal, point: hit.point.clone() };
@@ -65,6 +65,15 @@ function findBestAdjacentPlacement(board: BreachBoard, cellIndex: number, prefer
   }
 
   return bestIndex;
+}
+
+function placementNormalFromHit(point: THREE.Vector3, renderer: BreachRenderer, board: BreachBoard, cellIndex: number): Vec3 {
+  // The Breach now rotates as a visual group while the camera stays fixed.
+  // Convert the clicked point back into Breach-local space, compare it to the
+  // clicked cell center, then choose the dominant local axis as the placement face.
+  const localPoint = renderer.worldPointToBreachLocal(point);
+  const localCenter = renderer.localPositionOf(board, cellIndex);
+  return normalizeFaceNormal(localPoint.sub(localCenter));
 }
 
 function normalizeFaceNormal(n: THREE.Vector3): Vec3 {

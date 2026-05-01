@@ -11,9 +11,10 @@ type PostRunScreenProps = {
   heroes: HeroState[];
   report: MetaProgressReport;
   onRestart: () => void;
+  onDraft?: () => void;
 };
 
-export function PostRunScreen({ lossReason, score, enemiesDefeated, xpAwarded, heroes, report, onRestart }: PostRunScreenProps) {
+export function PostRunScreen({ lossReason, score, enemiesDefeated, xpAwarded, heroes, report, onRestart, onDraft }: PostRunScreenProps) {
   const awards = report.heroAwards.length > 0
     ? report.heroAwards
     : heroes.map((hero) => ({
@@ -78,7 +79,10 @@ export function PostRunScreen({ lossReason, score, enemiesDefeated, xpAwarded, h
           })}
         </div>
 
-        <button className="post-run-restart" onClick={onRestart}>Start Next Run</button>
+        <div className="post-run-actions">
+          <button className="post-run-restart" onClick={onRestart}>Start Next Run</button>
+          {onDraft ? <button className="post-run-draft" onClick={onDraft}>Change Team</button> : null}
+        </div>
       </div>
     </div>
   );

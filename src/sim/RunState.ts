@@ -196,36 +196,67 @@ export class RunState implements ShopRunApi {
 
     let message = '';
     let snap: IslandSnapResult | undefined;
+    let removed = 0;
+    let chain = 0;
     let removedIndices: number[] = [];
     let playerAttack = false;
+    let hardKnockdown = false;
+    let poiseBlocked = false;
+
+    const absorbSettleReport = (prefix: string): void => {
+      const settle = this.settleBoardAfterMutation();
+      if (!settle) {
+        message = prefix;
+        return;
+      }
+
+      removed = settle.removed;
+      chain = settle.chain;
+      snap = settle.snap;
+      removedIndices = settle.removedIndices ?? [];
+      playerAttack = !!settle.playerAttack;
+      hardKnockdown = !!settle.hardKnockdown;
+      poiseBlocked = !!settle.poiseBlocked;
+      message = prefix + ' ' + settle.text;
+    };
+
     switch (hero.activePower) {
       case 'hex-burst': {
         const dealt = damageEnemy(this.enemy, hero.baseDamage * 22 + 90);
         playerAttack = dealt > 0;
-        message = `${hero.name} hex-burst for ${dealt} damage.`;
+        message = hero.name + ' hex-burst for ' + dealt + ' damage.';
         break;
       }
-      case 'shield-team': message = `${hero.name} shielded the crew for ${shieldTeam(this.heroes, 28)} total shield.`; break;
-      case 'core-stabilize': { const r = shrinkStaticCore(this.board, 1); message = `${hero.name} stabilized core ${r.oldRadius} -> ${r.newRadius}.`; break; }
+      case 'shield-team': {
+        message = hero.name + ' shielded the crew for ' + shieldTeam(this.heroes, 28) + ' total shield.';
+        break;
+      }
+      case 'core-stabilize': {
+        const r = shrinkStaticCore(this.board, 1);
+        absorbSettleReport(hero.name + ' stabilized core ' + r.oldRadius + ' -> ' + r.newRadius + '.');
+        break;
+      }
       case 'breach-bomb': {
         const removed = this.clearRadius1(targetCellIndex);
-        this.resolveBoardAfterManualDestruction();
-        snap = this.lastAction.snap;
-        removedIndices = this.lastAction.removedIndices ?? [];
-        playerAttack = removed > 0 || !!this.lastAction.playerAttack;
-        message = `${hero.name} erased ${removed} blocks. ${this.lastAction.text}`;
+        absorbSettleReport(hero.name + ' erased ' + removed + ' blocks.');
+        playerAttack = removed > 0 || playerAttack;
         break;
       }
-      case 'queue-hack': this.blockQueue.rerollAll(); this.extraMovesNextTurn++; message = `${hero.name} hacked the queue and banked +1 move.`; break;
+      case 'queue-hack': {
+        this.blockQueue.rerollAll();
+        this.extraMovesNextTurn++;
+        message = hero.name + ' hacked the queue and banked +1 move.';
+        break;
+      }
     }
+
     spendHeroAp(hero);
-    this.lastAction = { text: message, removed: 0, chain: 0, snap, removedIndices, playerAttack };
+    this.lastAction = { text: message, removed, chain, snap, removedIndices, playerAttack, hardKnockdown, poiseBlocked };
     this.addLog(message);
     this.checkEnemyDefeated();
     this.checkLossConditions();
     return true;
   }
-
   tryBuy(itemId: ShopItemId, target = this.selectedCellIndex): boolean {
     if (this.phase !== 'shop') return false;
     if (itemId === ShopItemId.RerollQueue && this.rerollsUsedThisShop >= 1) {
@@ -294,12 +325,17 @@ export class RunState implements ShopRunApi {
   }
 
   resolveBoardAfterManualDestruction(): void {
-    const snap = this.snapSystem.resolve(this.board);
-    const snapSeeds = snap.movedIndices.map((move) => move.to);
-    this.resolveBoardAfterMatches(snap, snapSeeds);
+    this.settleBoardAfterMutation();
     this.checkEnemyDefeated();
   }
 
+  private settleBoardAfterMutation(): LastActionReport | null {
+    const previousAction = this.lastAction;
+    const snap = this.snapSystem.resolve(this.board);
+    const snapSeeds = snap.movedIndices.map((move) => move.to);
+    this.resolveBoardAfterMatches(snap, snapSeeds);
+    return this.lastAction !== previousAction ? this.lastAction : null;
+  }
   addLog(message: string): void { this.log.push(message); if (this.log.length > 80) this.log.shift(); }
 
   getSnapshot(): RunSnapshot {

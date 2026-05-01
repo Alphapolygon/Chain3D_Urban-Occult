@@ -69,7 +69,8 @@ function applyShopItem(run: ShopRunApi, item: ShopItemDefinition, target: number
     }
     case ShopItemId.CoreStabilizer: {
       const result = shrinkStaticCore(run.board, 1);
-      return `Core stabilized ${result.oldRadius} -> ${result.newRadius}.`;
+      run.resolveBoardAfterManualDestruction();
+      return `Core stabilized ${result.oldRadius} -> ${result.newRadius}. Floating Breach matter settled inward.`;
     }
     case ShopItemId.RerollQueue: {
       run.blockQueue.rerollAll();

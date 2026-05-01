@@ -4,7 +4,9 @@ import type { IslandSnapMove } from '../sim/IslandSnapSystem';
 import { colorOf, colorToCss, isCore, isLocked, isOccupied, isStatic } from '../sim/CellBits';
 
 export class BreachRenderer {
+  readonly group: THREE.Group;
   readonly mesh: THREE.InstancedMesh;
+  readonly edgeMesh: THREE.InstancedMesh;
   readonly instanceIdToCellIndex: Int32Array;
   readonly cellIndexToInstanceId: Int32Array;
 
@@ -29,6 +31,10 @@ export class BreachRenderer {
   private instanceCount = 0;
 
   constructor(scene: THREE.Scene, maxInstances: number) {
+    this.group = new THREE.Group();
+    this.group.name = 'Breach visual rotation root';
+    scene.add(this.group);
+
     this.instanceIdToCellIndex = new Int32Array(maxInstances);
     this.cellIndexToInstanceId = new Int32Array(maxInstances);
     this.previousCells = new Uint16Array(maxInstances);
@@ -63,7 +69,39 @@ export class BreachRenderer {
     this.mesh = new THREE.InstancedMesh(geometry, material, maxInstances);
     this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     this.mesh.frustumCulled = false;
-    scene.add(this.mesh);
+    this.mesh.renderOrder = 10;
+    this.group.add(this.mesh);
+
+    const edgeGeometry = new THREE.BoxGeometry(0.982, 0.982, 0.982);
+    const edgeMaterial = new THREE.MeshBasicMaterial({
+      color: '#e9f7ff',
+      transparent: true,
+      opacity: 0.24,
+      wireframe: true,
+      depthWrite: false
+    });
+    this.edgeMesh = new THREE.InstancedMesh(edgeGeometry, edgeMaterial, maxInstances);
+    this.edgeMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    this.edgeMesh.frustumCulled = false;
+    this.edgeMesh.renderOrder = 11;
+    this.group.add(this.edgeMesh);
+  }
+
+  rotateByDrag(deltaX: number, deltaY: number): void {
+    this.group.rotation.y += deltaX * 0.008;
+    this.group.rotation.x = THREE.MathUtils.clamp(this.group.rotation.x + deltaY * 0.008, -1.28, 1.28);
+  }
+
+  resetVisualRotation(): void { this.group.rotation.set(0, 0, 0); }
+
+  localPositionOf(board: BreachBoard, index: number): THREE.Vector3 {
+    const p = this.worldPositionOf(board, index);
+    return new THREE.Vector3(p.x, p.y, p.z);
+  }
+
+  worldPointToBreachLocal(point: THREE.Vector3): THREE.Vector3 {
+    this.group.updateWorldMatrix(true, false);
+    return this.group.worldToLocal(point.clone());
   }
 
   prepareSnapAnimation(moves: readonly IslandSnapMove[] | undefined): void {
@@ -104,10 +142,12 @@ export class BreachRenderer {
 
     this.instanceCount = instance;
     this.mesh.count = instance;
+    this.edgeMesh.count = instance;
     this.previousCells.set(board.cells);
     this.pendingFromIndexByTarget.fill(-1);
     this.mesh.instanceMatrix.needsUpdate = true;
     if (this.mesh.instanceColor) this.mesh.instanceColor.needsUpdate = true;
+    this.edgeMesh.instanceMatrix.needsUpdate = true;
   }
 
   update(): void {
@@ -130,17 +170,24 @@ export class BreachRenderer {
       this.dummy.scale.setScalar(this.scaleByCell[cellIndex] * slam);
       this.dummy.updateMatrix();
       this.mesh.setMatrixAt(instance, this.dummy.matrix);
+      this.edgeMesh.setMatrixAt(instance, this.dummy.matrix);
       changed = true;
     }
 
-    if (changed) this.mesh.instanceMatrix.needsUpdate = true;
+    if (changed) {
+      this.mesh.instanceMatrix.needsUpdate = true;
+      this.edgeMesh.instanceMatrix.needsUpdate = true;
+    }
   }
 
   dispose(scene: THREE.Scene): void {
-    scene.remove(this.mesh);
+    scene.remove(this.group);
     this.mesh.geometry.dispose();
+    this.edgeMesh.geometry.dispose();
     if (Array.isArray(this.mesh.material)) for (const m of this.mesh.material) m.dispose();
     else this.mesh.material.dispose();
+    if (Array.isArray(this.edgeMesh.material)) for (const m of this.edgeMesh.material) m.dispose();
+    else this.edgeMesh.material.dispose();
   }
 
   cellIndexForInstance(instanceId: number): number {
@@ -160,6 +207,7 @@ export class BreachRenderer {
     this.dummy.scale.setScalar(scale);
     this.dummy.updateMatrix();
     this.mesh.setMatrixAt(instance, this.dummy.matrix);
+    this.edgeMesh.setMatrixAt(instance, this.dummy.matrix);
 
     if (isCore(cell)) this.color.set('#ffffff');
     else if (isStatic(cell)) this.color.set('#8d7bff');
