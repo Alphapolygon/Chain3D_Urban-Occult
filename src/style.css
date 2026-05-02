@@ -213,28 +213,6 @@ button.speed.enabled { background: linear-gradient(135deg,#8dfcff,#6b6cff); colo
   width: 28px;
   height: 28px;
   padding: 0;
-  border-radius: 9px;
-  line-height: 1;
-  background: linear-gradient(135deg, rgba(255,66,208,.95), rgba(107,108,255,.9));
-}
-.debug-toggle {
-  position: absolute;
-  top: 24px;
-  left: 24px;
-  z-index: 999;
-  pointer-events: auto;
-}
-
-.debug-config-title {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-.debug-close {
-  width: 28px;
-  height: 28px;
-  padding: 0;
   border-radius: 10px;
   background: rgba(255,255,255,.10);
   box-shadow: none;
@@ -1182,9 +1160,8 @@ button.ready-button {
 
 
 /* --- GIF BACKDROP STAGE ---
-   The 3D city/floor meshes are removed from the scene. The arena now uses
-   a lightweight animated bg.gif behind the transparent WebGL canvas. Replace
-   src/assets/bg.gif with final art when available. */
+   Animated bg.gif sits behind the transparent WebGL canvas. The Reflector
+   floor and Breach/fighter scene render above it. */
 #scene-root {
   background: #05040a;
   isolation: isolate;

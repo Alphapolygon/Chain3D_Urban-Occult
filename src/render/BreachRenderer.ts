@@ -30,7 +30,7 @@ export class BreachRenderer {
   private readonly scaleByCell: Float32Array;
   private instanceCount = 0;
 
-  constructor(scene: THREE.Scene, maxInstances: number) {
+  constructor(scene: THREE.Scene, maxInstances: number, cubeGeo: THREE.BufferGeometry, cubeMat: THREE.Material) {
     this.group = new THREE.Group();
     this.group.name = 'Breach visual rotation root';
     scene.add(this.group);
@@ -58,21 +58,16 @@ export class BreachRenderer {
     this.pendingFromIndexByTarget.fill(-1);
     this.cellAtInstance.fill(-1);
 
-    const geometry = new THREE.BoxGeometry(0.94, 0.94, 0.94);
-    const material = new THREE.MeshStandardMaterial({
-      color: '#ffffff',
-      roughness: 0.2,
-      metalness: 0.1,
-      emissive: new THREE.Color('#2a1b42'),
-      emissiveIntensity: 0.6
-    });
-    this.mesh = new THREE.InstancedMesh(geometry, material, maxInstances);
+    // USE THE LOADED MODEL INSTEAD OF PROGAMMER ART
+    this.mesh = new THREE.InstancedMesh(cubeGeo, cubeMat, maxInstances);
     this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     this.mesh.frustumCulled = false;
     this.mesh.renderOrder = 10;
     this.group.add(this.mesh);
 
-    const edgeGeometry = new THREE.BoxGeometry(0.982, 0.982, 0.982);
+    // Copy the custom model geometry and scale it up slightly for the highlight edges
+    const edgeGeometry = cubeGeo.clone();
+    edgeGeometry.scale(1.045, 1.045, 1.045); 
     const edgeMaterial = new THREE.MeshBasicMaterial({
       color: '#e9f7ff',
       transparent: true,
@@ -86,6 +81,8 @@ export class BreachRenderer {
     this.edgeMesh.renderOrder = 11;
     this.group.add(this.edgeMesh);
   }
+
+
 
   rotateByDrag(deltaX: number, deltaY: number): void {
     this.group.rotation.y += deltaX * 0.008;

@@ -2,6 +2,7 @@
 import './style.css';
 import * as THREE from 'three';
 import React from 'react';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { createRoot } from 'react-dom/client';
 import * as TWEEN from '@tweenjs/tween.js';
 import { BreachBoard } from './sim/BreachBoard';
@@ -29,7 +30,7 @@ if (!sceneRoot || !uiRoot) throw new Error('Missing #scene-root or #ui-root.');
 
 
 let runConfig: RunConfig = {
-  board: { maxSize: 15, initialRadius: 4, initialCoreRadius: 1, fillPercent: 0.44, colorCount: 5, lockedPercent: 0.055, staticNoisePercent: 0.025, seed: 1337 },
+  board: { maxSize: 15, initialRadius: 4, initialCoreRadius: 1, fillPercent: 0.44, colorCount: 5, lockedPercent: 0.055, staticNoisePercent: 0, seed: 1337 },
   movesPerTurn: 3,
   queueLength: 5,
   scorePerBlock: 100,
@@ -54,6 +55,40 @@ webglRenderer.outputColorSpace = THREE.SRGBColorSpace;
 webglRenderer.setClearColor(0x000000, 0);
 sceneRoot.appendChild(webglRenderer.domElement);
 
+const gltfLoader = new GLTFLoader();
+const cubeUrl = new URL('./assets/models/cube.glb', import.meta.url).href;
+const gltf = await gltfLoader.loadAsync(cubeUrl);
+
+let loadedGeo: THREE.BufferGeometry | undefined;
+let loadedMat: THREE.Material | undefined;
+
+gltf.scene.traverse((child) => {
+  if (child instanceof THREE.Mesh && !loadedGeo) {
+    loadedGeo = child.geometry.clone();
+    loadedGeo.applyMatrix4(child.matrixWorld);
+    
+    // Normalize the imported scale to exactly 0.94 units to fit the grid
+    loadedGeo.computeBoundingBox();
+    const size = new THREE.Vector3();
+    loadedGeo.boundingBox!.getSize(size);
+    const maxDim = Math.max(size.x, size.y, size.z);
+    loadedGeo.scale(0.94 / maxDim, 0.94 / maxDim, 0.94 / maxDim);
+
+    // Keep the model's baked texture, but apply our neon game-feel to it
+    const mat = child.material as THREE.MeshStandardMaterial;
+    mat.roughness = 0.15;
+    mat.metalness = 0.2;
+    mat.emissive = new THREE.Color('#2a1b42');
+    mat.emissiveIntensity = 0.6;
+    mat.color = new THREE.Color('#ffffff'); // InstancedMesh multiplies this with instanceColor
+    loadedMat = mat;
+  }
+});
+
+if (!loadedGeo || !loadedMat) throw new Error("Failed to load cube.glb mesh");
+const cubeGeo = loadedGeo;
+const cubeMat = loadedMat;
+
 let speedMode = false;
 const cameraRig = new CameraRig(webglRenderer.domElement);
 scene.add(new THREE.HemisphereLight('#ffffff', '#15111f', 4.0));
@@ -74,8 +109,24 @@ scene.add(bounceLight);
 
 buildEnvironment(scene);
 
-let breachRenderer = new BreachRenderer(scene, run.board.cellCount);
+let breachRenderer = new BreachRenderer(scene, run.board.cellCount, cubeGeo, cubeMat);
 const picking = new BreachPicking();
+
+const placementGhostGroup = new THREE.Group();
+const placementGhostFill = new THREE.Mesh(
+  new THREE.BoxGeometry(0.96, 0.96, 0.96),
+  new THREE.MeshBasicMaterial({ color: '#8dfcff', transparent: true, opacity: 0.30, depthWrite: false, blending: THREE.AdditiveBlending })
+);
+const placementGhostWire = new THREE.Mesh(
+  new THREE.BoxGeometry(1.03, 1.03, 1.03),
+  new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.62, wireframe: true, depthWrite: false })
+);
+placementGhostGroup.name = 'Placement ghost preview';
+placementGhostGroup.visible = false;
+placementGhostFill.renderOrder = 40;
+placementGhostWire.renderOrder = 41;
+placementGhostGroup.add(placementGhostFill, placementGhostWire);
+attachPlacementGhost();
 
 // REPOSITIONED FOR 2X ZOOM: Heroes on the left, Enemy on the right, floor raised to Y: -9.0
 const heroBillboardBasePositions = [
@@ -113,6 +164,46 @@ function canInteractWithBreach(): boolean {
 
 function syncBreachInputEnabled(): void {
   cameraRig.controls.enabled = canInteractWithBreach();
+}
+
+function attachPlacementGhost(): void {
+  breachRenderer.group.add(placementGhostGroup);
+  hidePlacementGhost();
+}
+
+function hidePlacementGhost(): void {
+  placementGhostGroup.visible = false;
+  webglRenderer.domElement.style.cursor = canInteractWithBreach() ? 'default' : 'not-allowed';
+}
+
+function setPlacementGhostColor(color: string, opacity: number): void {
+  const fill = placementGhostFill.material as THREE.MeshBasicMaterial;
+  const wire = placementGhostWire.material as THREE.MeshBasicMaterial;
+  fill.color.set(color);
+  fill.opacity = opacity;
+  wire.color.set(color);
+  wire.opacity = Math.min(0.9, opacity + 0.34);
+}
+
+function showPlacementGhost(index: number, color: string, valid: boolean): void {
+  if (!run.board.inBoundsIndex(index)) { hidePlacementGhost(); return; }
+  const p = breachRenderer.localPositionOf(run.board, index);
+  placementGhostGroup.position.copy(p);
+  setPlacementGhostColor(color, valid ? 0.34 : 0.24);
+  placementGhostGroup.visible = true;
+  webglRenderer.domElement.style.cursor = valid ? 'copy' : 'not-allowed';
+}
+
+function updatePlacementGhost(event: PointerEvent): void {
+  if (pointerIsDown || !canInteractWithBreach()) { hidePlacementGhost(); return; }
+  const pick = picking.pick(event, webglRenderer.domElement, cameraRig.camera, breachRenderer, run.board);
+  if (!pick) { hidePlacementGhost(); return; }
+
+  if (pick.placementIndex >= 0) {
+    showPlacementGhost(pick.placementIndex, colorToCss(run.nextColor), true);
+  } else {
+    showPlacementGhost(pick.cellIndex, '#ff375f', false);
+  }
 }
 
 const particleGroup = new THREE.Group();
@@ -324,13 +415,14 @@ function applyDebugConfig(newConfig: RunConfig): void {
   clearEnemyTurnTimer();
   const maxSize = newConfig.board.maxSize % 2 === 0 ? newConfig.board.maxSize + 1 : newConfig.board.maxSize;
   const initialRadius = Math.min(newConfig.board.initialRadius, Math.floor(maxSize / 2) - 1);
-  runConfig = { ...newConfig, board: { ...newConfig.board, maxSize, initialRadius } };
+  runConfig = { ...newConfig, board: { ...newConfig.board, maxSize, initialRadius, staticNoisePercent: 0 } };
   run = new RunState(runConfig, draftedHeroes);
   run.startRun();
   gameStarted = true;
   breachRenderer.dispose(scene);
-  breachRenderer = new BreachRenderer(scene, run.board.cellCount);
+  breachRenderer = new BreachRenderer(scene, run.board.cellCount, cubeGeo, cubeMat);
   breachRenderer.group.add(particleGroup);
+  attachPlacementGhost();
   processedAction = null;
   invalidate(true);
 }
@@ -408,8 +500,9 @@ function startRunWithDraft(draft: HeroDefinition[]): void {
   run.startRun((Date.now() ^ Math.floor(Math.random() * 0xffffffff)) >>> 0);
   gameStarted = true;
   breachRenderer.dispose(scene);
-  breachRenderer = new BreachRenderer(scene, run.board.cellCount);
+  breachRenderer = new BreachRenderer(scene, run.board.cellCount, cubeGeo, cubeMat);
   breachRenderer.group.add(particleGroup);
+  attachPlacementGhost();
   processedAction = null;
   invalidate(true);
 }
@@ -450,7 +543,7 @@ function App({ snapshot }: { snapshot: RunSnapshot }) {
       ? 'ENEMY TURN. Brace for impact.'
       : snapshot.shopOpen
         ? 'Shop is open. Breach input is locked until you continue to the next monster.'
-        : 'Click an exposed cube face to place the next block. Drag the Breach itself to rotate it; rotation spends a move.';
+        : 'Click an exposed cube face to place the next block. Drag the Breach itself to rotate it. Rotation is free; only placing blocks spends moves.';
 
   return h(React.Fragment, null,
     debugOpen
@@ -484,6 +577,7 @@ function App({ snapshot }: { snapshot: RunSnapshot }) {
 
 webglRenderer.domElement.addEventListener('pointerdown', (event: PointerEvent) => {
   sfx.init();
+  hidePlacementGhost();
   pointerDownX = event.clientX;
   pointerDownY = event.clientY;
   lastPointerX = event.clientX;
@@ -496,7 +590,12 @@ webglRenderer.domElement.addEventListener('pointerdown', (event: PointerEvent) =
 });
 
 webglRenderer.domElement.addEventListener('pointermove', (event: PointerEvent) => {
-  if (!pointerIsDown || !canInteractWithBreach()) return;
+  if (!pointerIsDown) {
+    updatePlacementGhost(event);
+    return;
+  }
+  if (!canInteractWithBreach()) { hidePlacementGhost(); return; }
+
   const totalDistance = Math.hypot(event.clientX - pointerDownX, event.clientY - pointerDownY);
   const dx = event.clientX - lastPointerX;
   const dy = event.clientY - lastPointerY;
@@ -519,17 +618,18 @@ webglRenderer.domElement.addEventListener('pointerup', (event: PointerEvent) => 
   try { webglRenderer.domElement.releasePointerCapture(event.pointerId); } catch { }
 
   if (shouldTreatAsRotation) {
-    if (dragRotatedBreach && canInteractWithBreach() && run.playerRotateBreach()) {
-      playLastActionVisuals();
-      invalidate(false);
-    }
+    // Rotating the Breach is free. Only successful block placement spends moves
+    // and advances enemy timing.
+    if (dragRotatedBreach && canInteractWithBreach()) invalidate(false);
     dragRotatedBreach = false;
     dragExceededClickThreshold = false;
+    updatePlacementGhost(event);
     return;
   }
 
   if (!canInteractWithBreach()) {
     syncBreachInputEnabled();
+    hidePlacementGhost();
     return;
   }
 
@@ -542,6 +642,7 @@ webglRenderer.domElement.addEventListener('pointerup', (event: PointerEvent) => 
   }
 
   run.selectCell(pick.cellIndex);
+  hidePlacementGhost();
   if (pick.placementIndex >= 0) {
     if (!run.playerPlaceAtIndex(pick.placementIndex) && pick.reason) run.reportInvalidPlacement(pick.reason);
     playLastActionVisuals();
@@ -557,12 +658,14 @@ webglRenderer.domElement.addEventListener('pointercancel', (event: PointerEvent)
   pointerIsDown = false;
   dragRotatedBreach = false;
   dragExceededClickThreshold = false;
+  hidePlacementGhost();
   try { webglRenderer.domElement.releasePointerCapture(event.pointerId); } catch { }
 });
 
 window.addEventListener('resize', () => {
   webglRenderer.setSize(window.innerWidth, window.innerHeight);
   cameraRig.resize(window.innerWidth, window.innerHeight);
+  hidePlacementGhost();
 });
 
 function frame(): void {

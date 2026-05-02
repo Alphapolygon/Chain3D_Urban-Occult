@@ -1,46 +1,60 @@
-# Chain3D - Urban Occult Web Prototype
+# Chain3D - Urban Occult Three.js Prototype
 
-Three.js + TypeScript prototype for the Urban Occult Chain3D direction.
+A rapid web prototype of the Chain3D Urban Occult design using TypeScript, Three.js, React UI overlays, and a data-oriented simulation core.
 
-## Run locally
+## Run
 
 ```bash
 npm install
 npm run dev
 ```
 
-## Build
+## Structure
 
-```bash
-npm run build
+```text
+src/
+├── sim/
+│   ├── CellBits.ts
+│   ├── BreachBoard.ts
+│   ├── MatchSystem.ts
+│   ├── IslandSnapSystem.ts
+│   ├── CoreGrowthSystem.ts
+│   ├── CombatSystem.ts
+│   ├── ShopSystem.ts
+│   └── RunState.ts
+├── render/
+│   ├── BreachRenderer.ts
+│   ├── BreachPicking.ts
+│   └── CameraRig.ts
+├── ui/
+│   ├── HeroPanel.tsx
+│   ├── EnemyPanel.tsx
+│   ├── QueuePreview.tsx
+│   └── DarkwebBodega.tsx
+├── data/
+│   ├── heroes.ts
+│   ├── enemies.ts
+│   └── shopItems.ts
+└── main.ts
 ```
 
-The project intentionally does not ship with `package-lock.json` right now because earlier lockfiles were generated with incompatible Vite/plugin versions. Run `npm install` once locally, then commit the generated `package-lock.json` if you want to switch GitHub Actions back to `npm ci`.
+## Implemented
 
-## Recent patch contents
+* Flat `Uint16Array` board storage with bit-packed cells.
+* 3D match-3 detection on X/Y/Z axes.
+* Island snapping toward the static core as rigid groups.
+* Static core growth after enemy attacks.
+* Queued block preview.
+* Hero AP, frontline switching, active powers, shields, healing, damage.
+* Enemy waves, attack timer, damage escalation, AoE phase scaling.
+* Darkweb Bodega shop between waves.
+* InstancedMesh rendering and Raycaster placement.
 
-- Brighter neon block material and lighting.
-- Fighter-style HUD: Cleaners left, Breach center, Nightmare right.
-- Smaller default board for readability (`maxSize: 15`, `initialRadius: 4`).
-- Debug panel for board boundary, initial radius, fill percentage, and speed mode.
-- Seeded connected-cluster matching: placed/snap-moved blocks clear the entire face-connected same-color blob when the group size is 3+.
-- Match removed-index tracking for particle effects.
-- Match pop particles driven by `@tweenjs/tween.js`.
-- Dynamic camera tactical/action stance.
-- Screen shake and hit stop for big snaps/chains.
-- Island snap movement records for visual interpolation.
-- Smooth renderer interpolation for snapping blocks.
-- Cache/hold slot, once per turn.
-- Hard Knockdown: large Island Snaps delay enemy attack by +1 turn.
-- Poise: enemy gets temporary super armor against repeated knockdowns.
-- One-shot shop reroll behavior: after use, reroll glitches to `NO SIGNAL`.
+## Design note
 
-## GitHub Pages
+The `sim/` folder intentionally imports no Three.js or React. It can be unit-tested or ported back into Unity without dragging in rendering or UI code.
 
-The included workflow uses `npm install`, not `npm ci`, and disables package-manager caching while the prototype is moving fast.
 
-Make sure the Vite base in `vite.config.ts` matches your repo:
 
-```ts
-base: '/Chain3D_Urban-Occult/'
-```
+
+

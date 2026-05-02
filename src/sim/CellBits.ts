@@ -22,7 +22,6 @@ export const FACE_NORMALS: readonly Vec3[] = DIRECTIONS;
 export function makeColorCell(color: number, flags = 0): Cell { return ((color & COLOR_MASK) | OCCUPIED | flags) & 0xffff; }
 export function makeCorruptionCell(color: number, flags = 0): Cell { return makeColorCell(color, CORRUPTION | flags); }
 export function makeStaticCoreCell(): Cell { return (OCCUPIED | STATIC | CORE) & 0xffff; }
-export function makeStaticCell(): Cell { return (OCCUPIED | STATIC) & 0xffff; }
 export function colorOf(cell: Cell): number { return cell & COLOR_MASK; }
 export function isOccupied(cell: Cell): boolean { return (cell & OCCUPIED) !== 0; }
 export function isStatic(cell: Cell): boolean { return (cell & STATIC) !== 0; }
@@ -31,7 +30,7 @@ export function isLocked(cell: Cell): boolean { return (cell & LOCKED) !== 0; }
 export function isCorruption(cell: Cell): boolean { return (cell & CORRUPTION) !== 0; }
 
 // Match rule: any face-connected same-color group of 3+ matchable cells clears.
-// Locked cells, the white core anchor, and colorless static noise are not matchable.
+// Locked cells and the white core anchor are not matchable.
 // Colored corruption/core-growth cells are matchable and removable by matches.
 export function isMatchable(cell: Cell): boolean { return isOccupied(cell) && !isCore(cell) && !isLocked(cell) && colorOf(cell) > 0; }
 

@@ -182,11 +182,9 @@ export class RunState implements ShopRunApi {
   }
 
   playerRotateBreach(): boolean {
-    if (this.phase !== 'playing') return false;
-    this.consumeMove('Committed rotation.');
-    this.advanceEnemyAfterPlayerMove();
-    this.checkLossConditions();
-    return true;
+    // Rotation is a free inspection action. Only successful placement spends a move
+    // and advances enemy timing.
+    return this.phase === 'playing';
   }
 
   tryActivateHeroPower(heroIndex: number, targetCellIndex = this.selectedCellIndex): boolean {
@@ -479,12 +477,12 @@ export class RunState implements ShopRunApi {
     this.phase = 'enemy-turn';
     const previous = this.lastAction;
     const warning = `${forced ? 'Forced: ' : ''}ENEMY TURN. ${this.enemy.name} prepares to strike!`;
+    const shouldAppendPrevious = previous.removed > 0 || !!previous.playerAttack || !!previous.snap?.clustersMoved;
     this.lastAction = {
-      ...previous,
-      text: previous.removed > 0 || previous.playerAttack || previous.snap?.clustersMoved
-        ? `${previous.text} ${warning}`
-        : warning,
-      removedIndices: previous.removedIndices ?? [],
+      text: shouldAppendPrevious ? `${previous.text} ${warning}` : warning,
+      removed: 0,
+      chain: 0,
+      removedIndices: [],
       enemyTurn: true
     };
     this.addLog(warning);
