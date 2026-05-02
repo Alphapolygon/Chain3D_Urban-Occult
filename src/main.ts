@@ -84,8 +84,6 @@ window.addEventListener('resize', () => {
   cameraRig.resize(window.innerWidth, window.innerHeight);
 });
 
-invalidate(true);
-frame();
 
 function createBreachRenderer(): BreachRenderer {
   return new BreachRenderer(scene, run.board.cellCount, cubeModel.geometry, cubeModel.material);
@@ -376,3 +374,8 @@ function frame(): void {
 function randomSeed(): number {
   return (Date.now() ^ Math.floor(Math.random() * 0xffffffff)) >>> 0;
 }
+
+
+// Initial UI/render start must happen after debugRuntimeActions is initialized.
+invalidate(true);
+frame();
