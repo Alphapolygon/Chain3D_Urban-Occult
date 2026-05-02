@@ -16,13 +16,13 @@ export function DraftScreen({ heroes, initialSelectedIds, onStart }: DraftScreen
   const [selectedIds, setSelectedIds] = useState<string[]>(Array.from(initial));
 
   const selectedHeroes = selectedIds
-    .map((id) => heroes.find((hero) => hero.id === id))
-    .filter((hero): hero is HeroDefinition => !!hero);
+    .map((id: string) => heroes.find((hero: HeroDefinition) => hero.id === id))
+    .filter((hero: HeroDefinition | undefined): hero is HeroDefinition => !!hero);
   const canStart = selectedHeroes.length === 3;
 
   function toggleHero(hero: HeroDefinition): void {
-    setSelectedIds((current) => {
-      if (current.includes(hero.id)) return current.filter((id) => id !== hero.id);
+    setSelectedIds((current: string[]) => {
+      if (current.includes(hero.id)) return current.filter((id: string) => id !== hero.id);
       if (current.length >= 3) return [...current.slice(1), hero.id];
       return [...current, hero.id];
     });
@@ -38,7 +38,7 @@ export function DraftScreen({ heroes, initialSelectedIds, onStart }: DraftScreen
         </p>
 
         <div className="draft-grid">
-          {heroes.map((hero) => {
+          {heroes.map((hero: HeroDefinition) => {
             const progress = getHeroProgress(hero.id);
             const selected = selectedIds.includes(hero.id);
             const xpReq = getXpRequiredForNextLevel(progress.level);
@@ -80,7 +80,7 @@ export function DraftScreen({ heroes, initialSelectedIds, onStart }: DraftScreen
         <div className="draft-footer">
           <div>
             <strong>{selectedHeroes.length}/3 selected</strong>
-            <span>{selectedHeroes.map((hero) => hero.name).join(' · ') || 'Choose your Cleaners'}</span>
+            <span>{selectedHeroes.map((hero: HeroDefinition) => hero.name).join(' · ') || 'Choose your Cleaners'}</span>
           </div>
           <button disabled={!canStart} onClick={() => canStart && onStart(selectedHeroes)}>Start Run</button>
         </div>

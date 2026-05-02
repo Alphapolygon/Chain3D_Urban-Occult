@@ -306,7 +306,9 @@ export class RunState implements ShopRunApi {
   }
   forceCoreGrowth(amount: number): void {
     const r = expandStaticCore(this.board, amount);
-    this.lastAction = { text: `Core expanded ${r.oldRadius} -> ${r.newRadius}. Colored growth blocks spawned; matches wait for player placement.`, removed: 0, chain: 0, removedIndices: [], coreGrew: true };
+    const snap = this.snapFloatingBlocksOnly();
+    const snapText = snap && snap.clustersMoved > 0 ? ` ${snap.cellsMoved} floating blocks snapped inward.` : '';
+    this.lastAction = { text: `Core expanded ${r.oldRadius} -> ${r.newRadius}. Colored growth blocks spawned; matches wait for player placement.${snapText}`, removed: 0, chain: 0, removedIndices: [], coreGrew: true, snap };
     this.addLog(this.lastAction.text);
     this.checkLossConditions();
   }
@@ -331,10 +333,20 @@ export class RunState implements ShopRunApi {
 
   private settleBoardAfterMutation(): LastActionReport | null {
     const previousAction = this.lastAction;
-    const snap = this.snapSystem.resolve(this.board);
-    const snapSeeds = snap.movedIndices.map((move) => move.to);
-    this.resolveBoardAfterMatches(snap, snapSeeds);
-    return this.lastAction !== previousAction ? this.lastAction : null;
+    let changed = false;
+
+    // Hero powers and shop cards can delete arbitrary support blocks. Always run
+    // the same gravity settle loop that normal matching uses, and repeat it a few
+    // times so a second-order island created by a power cannot remain floating.
+    for (let pass = 0; pass < Math.max(4, this.config.maxChains); pass++) {
+      const snap = this.snapSystem.resolve(this.board);
+      if (snap.clustersMoved <= 0) break;
+      changed = true;
+      const snapSeeds = snap.movedIndices.map((move) => move.to);
+      this.resolveBoardAfterMatches(snap, snapSeeds);
+    }
+
+    return changed && this.lastAction !== previousAction ? this.lastAction : null;
   }
   addLog(message: string): void { this.log.push(message); if (this.log.length > 80) this.log.shift(); }
 
@@ -433,6 +445,11 @@ export class RunState implements ShopRunApi {
     return { damage, hardKnockdown, poiseBlocked };
   }
 
+  private snapFloatingBlocksOnly(): IslandSnapResult | undefined {
+    const snap = this.snapSystem.resolve(this.board);
+    return snap.clustersMoved > 0 ? snap : undefined;
+  }
+
   private consumeMove(prefix: string): void {
     this.movesLeft = Math.max(0, this.movesLeft - 1);
     this.lastAction = { text: `${prefix} ${this.movesLeft} moves left. ${this.enemy.name} attacks in ${this.enemy.attackTimer} moves.`, removed: 0, chain: 0, removedIndices: [] };
@@ -480,18 +497,21 @@ export class RunState implements ShopRunApi {
     const growthChance = this.currentCoreGrowthChance();
     let coreGrew = false;
     let text = `${forced ? 'Forced: ' : ''}${attack.text}`;
+    let growthSnap: IslandSnapResult | undefined;
 
     if (this.rng.next() < growthChance) {
       const growth = expandStaticCore(this.board, this.enemy.growthAmount);
       coreGrew = true;
+      growthSnap = this.snapFloatingBlocksOnly();
       text += ` Core expanded ${growth.oldRadius} -> ${growth.newRadius}.`;
+      if (growthSnap && growthSnap.clustersMoved > 0) text += ` ${growthSnap.cellsMoved} floating blocks snapped inward.`;
     } else {
       text += ` Core held stable (${Math.round(growthChance * 100)}% growth risk).`;
     }
 
     this.enemy.attackTimer = this.enemy.attackEveryTurns;
     this.pendingEnemyAttackForced = false;
-    this.lastAction = { text, removed: 0, chain: 0, removedIndices: [], enemyAttack: true, coreGrew };
+    this.lastAction = { text, removed: 0, chain: 0, removedIndices: [], enemyAttack: true, coreGrew, snap: growthSnap };
     this.addLog(text);
 
     if (!poiseWasAppliedThisTurn && this.enemy.poiseTurns > 0) this.enemy.poiseTurns--;

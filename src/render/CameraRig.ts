@@ -1,13 +1,10 @@
+// src/render/CameraRig.ts
 import * as THREE from 'three';
 import * as TWEEN from '@tweenjs/tween.js';
 
 type CameraMode = 'tactical' | 'action';
 
-type FixedControls = {
-  enabled: boolean;
-  target: THREE.Vector3;
-  update: () => void;
-};
+type FixedControls = { enabled: boolean; target: THREE.Vector3; update: () => void; };
 
 export class CameraRig {
   readonly camera: THREE.PerspectiveCamera;
@@ -18,24 +15,20 @@ export class CameraRig {
   private shakeDuration = 1;
   private shakeStrength = 0;
   private lastShakeOffset = new THREE.Vector3();
-  private readonly tacticalPosition = new THREE.Vector3(16, 12, 18);
+
+  // 2X ZOOM: Camera moved much closer (Z: 18) and slightly lower (Y: 4.0)
+ private readonly tacticalPosition = new THREE.Vector3(0, 5.0, 18.0);
+  private readonly tacticalLookTarget = new THREE.Vector3(0, -1.0, 0);
 
   constructor(_canvas: HTMLCanvasElement) {
-    this.camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 1000);
+    this.camera = new THREE.PerspectiveCamera(48, window.innerWidth / window.innerHeight, 0.1, 1000);
     this.camera.position.copy(this.tacticalPosition);
-    this.camera.lookAt(0, 0, 0);
+    this.camera.lookAt(this.tacticalLookTarget);
 
-    // Compatibility shim: main.ts still toggles controls.enabled to gate input,
-    // but the camera no longer orbits. Dragging rotates the Breach group instead.
-    this.controls = {
-      enabled: true,
-      target: new THREE.Vector3(0, 0, 0),
-      update: () => undefined
-    };
+    this.controls = { enabled: true, target: this.tacticalLookTarget.clone(), update: () => undefined };
   }
 
   triggerActionCamera(_speedMode = false): void {
-    // Cinematic pullback disabled. The camera stays locked in tactical view.
     this.mode = 'tactical';
     this.controls.enabled = true;
   }
@@ -76,7 +69,7 @@ export class CameraRig {
       this.shakeStrength = 0;
     }
 
-    this.camera.lookAt(0, 0, 0);
+    this.camera.lookAt(this.tacticalLookTarget);
   }
 
   resize(width: number, height: number): void {

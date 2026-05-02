@@ -1,3 +1,4 @@
+// src/main.ts
 import './style.css';
 import * as THREE from 'three';
 import React from 'react';
@@ -9,22 +10,23 @@ import { HEROES } from './data/heroes';
 import type { HeroDefinition } from './sim/CombatSystem';
 import { RunState, type LastActionReport, type RunConfig, type RunSnapshot } from './sim/RunState';
 import type { ShopItemId } from './sim/ShopSystem';
+import { colorToCss } from './sim/CellBits';
 import { BreachRenderer } from './render/BreachRenderer';
 import { BreachPicking } from './render/BreachPicking';
 import { CameraRig } from './render/CameraRig';
-import { HeroPanel } from './ui/HeroPanel';
-import { EnemyPanel } from './ui/EnemyPanel';
 import { QueuePreview } from './ui/QueuePreview';
 import { DarkwebBodega } from './ui/DarkwebBodega';
 import { PostRunScreen } from './ui/PostRunScreen';
 import { DraftScreen } from './ui/DraftScreen';
 import { SoundEngine } from './render/SoundEngine';
+import { FighterBillboard } from './render/fighters/FighterBillboard';
 import { buildEnvironment } from './render/Environment';
 
 const h = React.createElement;
 const sceneRoot = document.querySelector<HTMLDivElement>('#scene-root');
 const uiRoot = document.querySelector<HTMLDivElement>('#ui-root');
 if (!sceneRoot || !uiRoot) throw new Error('Missing #scene-root or #ui-root.');
+
 
 let runConfig: RunConfig = {
   board: { maxSize: 15, initialRadius: 4, initialCoreRadius: 1, fillPercent: 0.44, colorCount: 5, lockedPercent: 0.055, staticNoisePercent: 0.025, seed: 1337 },
@@ -42,13 +44,14 @@ let gameStarted = false;
 let run = new RunState(runConfig, draftedHeroes);
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color('#080611');
-scene.fog = new THREE.Fog('#080611', 38, 84);
+scene.background = null;
 
-const webglRenderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+
+const webglRenderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
 webglRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 webglRenderer.setSize(window.innerWidth, window.innerHeight);
 webglRenderer.outputColorSpace = THREE.SRGBColorSpace;
+webglRenderer.setClearColor(0x000000, 0);
 sceneRoot.appendChild(webglRenderer.domElement);
 
 let speedMode = false;
@@ -63,10 +66,28 @@ scene.add(rim);
 const cyanRim = new THREE.PointLight('#27e7ff', 90, 52);
 cyanRim.position.set(12, -2, 14);
 scene.add(cyanRim);
-const environmentParticles = buildEnvironment(scene);
+
+// The Bounce Light (ESSENTIAL so the mirror can see the bottom of the cube)
+const bounceLight = new THREE.DirectionalLight('#ff42d0', 6.0); 
+bounceLight.position.set(0, -20, 0); 
+scene.add(bounceLight);
+
+buildEnvironment(scene);
 
 let breachRenderer = new BreachRenderer(scene, run.board.cellCount);
 const picking = new BreachPicking();
+
+// REPOSITIONED FOR 2X ZOOM: Heroes on the left, Enemy on the right, floor raised to Y: -9.0
+const heroBillboardBasePositions = [
+  new THREE.Vector3(-19.0, -9.0, -3.0), // Back row (hugs left edge)
+  new THREE.Vector3(-16.0, -9.0, 0.0),  // Middle row
+  new THREE.Vector3(-13.0, -9.0, 3.0)   // Front row
+];
+const enemyBillboardBasePosition = new THREE.Vector3(13.0, -9.0, 0.0);
+
+const heroBillboards = heroBillboardBasePositions.map((position) => new FighterBillboard(scene, position, false));
+const enemyBillboard = new FighterBillboard(scene, enemyBillboardBasePosition, true);
+
 const root = createRoot(uiRoot);
 let sceneDirty = true;
 let pointerDownX = 0;
@@ -94,7 +115,6 @@ function syncBreachInputEnabled(): void {
   cameraRig.controls.enabled = canInteractWithBreach();
 }
 
-// --- PARTICLE SYSTEM ---
 const particleGroup = new THREE.Group();
 breachRenderer.group.add(particleGroup);
 const particleGeo = new THREE.BoxGeometry(1.0, 1.0, 1.0);
@@ -136,31 +156,28 @@ function combatEffectDuration(kind: CombatEffectKind): number {
   return 620;
 }
 
-function effectAnchorElement(anchor: CombatEffectAnchor): HTMLElement | null {
-  if (anchor === 'enemy') return document.querySelector<HTMLElement>('.enemy-panel');
-  if (anchor === 'heroes') return document.querySelector<HTMLElement>('.hero-panel');
-  return null;
+function effectAnchorPoint(anchor: CombatEffectAnchor): { x: number; y: number } {
+  if (anchor === 'enemy') return enemyBillboard.getScreenAnchor(cameraRig.camera, webglRenderer.domElement, 5.7);
+  if (anchor === 'heroes') {
+    const hero = heroBillboards[Math.max(0, Math.min(heroBillboards.length - 1, run.frontlineIndex))];
+    return hero.getScreenAnchor(cameraRig.camera, webglRenderer.domElement, 4.4);
+  }
+  return { x: window.innerWidth * 0.5, y: window.innerHeight * 0.5 };
 }
 
 function spawnCombatSlash(kind: CombatEffectKind, anchor: CombatEffectAnchor): void {
   const el = document.createElement('div');
-  el.className = `combat-slash ${kind} anchor-${anchor}`;
+  el.className = `combat-slash ${kind} anchor-${anchor} world-anchored`;
   el.textContent = kind === 'ko' ? 'K.O.' : kind === 'invalid' ? 'BLOCKED' : kind === 'enemy-turn' ? 'ENEMY TURN' : '';
 
-  const panelTarget = effectAnchorElement(anchor);
-  if (panelTarget) {
-    el.classList.add('panel-anchored');
-    panelTarget.appendChild(el);
-  } else {
-    const width = kind === 'invalid' ? 420 : 520;
-    const height = kind === 'invalid' ? 150 : 190;
-    el.classList.add('screen-anchored');
-    el.style.left = `${Math.max(8, window.innerWidth * 0.5 - width * 0.5)}px`;
-    el.style.top = `${Math.max(8, window.innerHeight * 0.5 - height * 0.5)}px`;
-    el.style.width = `${Math.min(window.innerWidth - 16, width)}px`;
-    el.style.height = `${height}px`;
-    document.body.appendChild(el);
-  }
+  const width = kind === 'invalid' ? 420 : kind === 'ko' ? 620 : 520;
+  const height = kind === 'invalid' ? 150 : kind === 'ko' ? 210 : 190;
+  const point = effectAnchorPoint(anchor);
+  el.style.left = `${Math.max(8, Math.min(window.innerWidth - width - 8, point.x - width * 0.5))}px`;
+  el.style.top = `${Math.max(8, Math.min(window.innerHeight - height - 8, point.y - height * 0.55))}px`;
+  el.style.width = `${Math.min(window.innerWidth - 16, width)}px`;
+  el.style.height = `${height}px`;
+  document.body.appendChild(el);
 
   window.setTimeout(() => el.remove(), combatEffectDuration(kind));
 }
@@ -225,12 +242,19 @@ function playLastActionVisuals(): void {
     cameraRig.shake(0.32, 180);
   }
   if (action.playerAttack) {
+    enemyBillboard.triggerHit(action.enemyDefeated ? 1.1 : 0.55);
     spawnCombatSlash(action.enemyDefeated ? 'ko' : 'player', 'enemy');
     cameraRig.triggerActionCamera(speedMode);
     cameraRig.shake(action.enemyDefeated ? 2.4 : 0.75, action.enemyDefeated ? 620 : 240);
     hitStop(action.enemyDefeated ? 220 : 80);
   }
   if (action.enemyAttack) {
+    const snapshot = run.getSnapshot();
+    if (snapshot.wave >= 11) {
+      for (let i = 0; i < snapshot.heroes.length; i++) if (snapshot.heroes[i]?.hp > 0) heroBillboards[i]?.triggerHit(0.42);
+    } else {
+      heroBillboards[Math.max(0, Math.min(heroBillboards.length - 1, snapshot.frontlineIndex))]?.triggerHit(0.46);
+    }
     spawnCombatSlash('enemy', 'heroes');
     cameraRig.triggerActionCamera(speedMode);
     cameraRig.shake(action.coreGrew ? 1.35 : 0.9, action.coreGrew ? 420 : 280);
@@ -253,7 +277,48 @@ function playLastActionVisuals(): void {
   if (action.enemyDefeated) scheduleShopAfterKo();
 }
 
-// --- DEBUG MENU LOGIC ---
+function syncFighterVisuals(): void {
+  const snapshot = run.getSnapshot();
+  const visible = gameStarted;
+  for (const billboard of heroBillboards) billboard.setVisible(visible);
+  enemyBillboard.setVisible(visible);
+  if (!visible) return;
+
+  for (let i = 0; i < heroBillboards.length; i++) {
+    const hero = snapshot.heroes[i];
+    const billboard = heroBillboards[i];
+    if (!hero) { billboard.setVisible(false); continue; }
+    billboard.setVisible(true);
+
+    const isFrontline = i === snapshot.frontlineIndex;
+    const base = heroBillboardBasePositions[i];
+    const target = base.clone();
+    
+    // UPDATE FRONTLINE STEP DISTANCE
+    if (isFrontline) {
+      target.x = -9.5; // Walk up, but safely stay on the left side
+      target.z = 2.0; 
+    }
+    
+    billboard.setBasePosition(target);
+    billboard.group.position.lerp(target, 0.14);
+    billboard.syncState(hero, isFrontline, cameraRig.camera, {
+      showAp: true,
+      ready: hero.hp > 0 && hero.ap >= hero.maxAp,
+      attackTimerText: hero.hp > 0 && hero.ap >= hero.maxAp ? 'SPECIAL READY' : ''
+    });
+  }
+
+  enemyBillboard.setBasePosition(enemyBillboardBasePosition);
+  enemyBillboard.group.position.lerp(enemyBillboardBasePosition, 0.08);
+  const timerText = snapshot.phase === 'enemy-turn'
+    ? 'ATTACK INCOMING'
+    : snapshot.phase === 'ko'
+      ? 'BANISHED'
+      : `ATTACKS IN ${snapshot.enemy.attackTimer} MOVES`;
+  enemyBillboard.syncState(snapshot.enemy, false, cameraRig.camera, { showAp: false, attackTimerText: timerText });
+}
+
 function applyDebugConfig(newConfig: RunConfig): void {
   clearKoShopTimer();
   clearEnemyTurnTimer();
@@ -291,8 +356,49 @@ function DebugMenu({ config, onApply, speed, onToggleSpeed, onClose }: { config:
   );
 }
 
-function invalidate(boardChanged = true): void { sceneDirty = sceneDirty || boardChanged; renderUi(); }
-function renderUi(): void { root.render(h(App, { snapshot: run.getSnapshot() })); }
+function SpecialControls({ snapshot }: { snapshot: RunSnapshot }) {
+  return h('div', { className: 'special-strip' },
+    h('div', { className: 'queue-title' }, 'Specials'),
+    ...snapshot.heroes.map((hero, index) => {
+      const ready = hero.hp > 0 && hero.ap >= hero.maxAp;
+      const isFront = index === snapshot.frontlineIndex;
+      return h('button', {
+        key: hero.id,
+        className: ready ? 'special-button ready' : 'special-button',
+        style: { '--hero-color': colorToCss(hero.color) } as React.CSSProperties,
+        disabled: !ready || snapshot.phase !== 'playing',
+        onClick: () => onActivateHero(index)
+      }, `${hero.name}${isFront ? ' // FRONT' : ''} · ${ready ? 'CAST' : `AP ${hero.ap}/${hero.maxAp}`}`);
+    })
+  );
+}
+
+function RunMiniPanel({ snapshot }: { snapshot: RunSnapshot }) {
+  return h('div', { className: 'run-mini-panel' },
+    h('div', null, h('strong', null, `Wave ${snapshot.wave}`), h('span', null, `Score ${snapshot.score}`)),
+    h('div', null, h('span', null, `${snapshot.enemy.name}`), h('strong', null, `HP ${snapshot.enemy.hp}/${snapshot.enemy.maxHp}`)),
+    h('div', null, h('span', null, `Breach ${snapshot.occupiedBlocks} blocks`), h('span', null, `Core ${snapshot.coreRadius}`)),
+    h('div', { className: 'debug-row mini-buttons' },
+      h('button', { onClick: onForceAttack }, 'Force attack'),
+      h('button', { onClick: () => onGrowCore(1) }, 'Core +1'),
+      h('button', { onClick: () => onGrowCore(2) }, 'Core +2'),
+      h('button', { onClick: restartRun }, 'Restart')
+    ),
+    h('div', { className: 'last-action' }, snapshot.lastAction.text),
+    h('div', { className: 'selected-cell' }, `Selected cell: ${snapshot.selectedCellIndex >= 0 ? snapshot.selectedCellIndex : 'none'}`)
+  );
+}
+
+function invalidate(boardChanged = true): void {
+  sceneDirty = sceneDirty || boardChanged;
+  renderUi();
+}
+
+function renderUi(): void {
+  sceneRoot!.classList.toggle('draft-active', !gameStarted);
+  root.render(h(App, { snapshot: run.getSnapshot() }));
+}
+
 function startRunWithDraft(draft: HeroDefinition[]): void {
   clearKoShopTimer();
   clearEnemyTurnTimer();
@@ -307,18 +413,24 @@ function startRunWithDraft(draft: HeroDefinition[]): void {
   processedAction = null;
   invalidate(true);
 }
+
 function restartRun(): void {
   if (!gameStarted) { renderUi(); return; }
-  clearKoShopTimer(); clearEnemyTurnTimer();
+  clearKoShopTimer();
+  clearEnemyTurnTimer();
   run.startRun((Date.now() ^ Math.floor(Math.random() * 0xffffffff)) >>> 0);
-  processedAction = null; invalidate(true);
+  processedAction = null;
+  invalidate(true);
 }
+
 function returnToDraft(): void {
-  clearKoShopTimer(); clearEnemyTurnTimer();
+  clearKoShopTimer();
+  clearEnemyTurnTimer();
   gameStarted = false;
   processedAction = null;
   invalidate(true);
 }
+
 function onActivateHero(heroIndex: number): void { if (run.tryActivateHeroPower(heroIndex)) { playLastActionVisuals(); invalidate(true); } }
 function onSwapCache(): void { if (run.playerSwapCache()) invalidate(false); }
 function onBuy(itemId: ShopItemId): void { if (run.tryBuy(itemId)) { playLastActionVisuals(); invalidate(true); } else invalidate(false); }
@@ -344,18 +456,14 @@ function App({ snapshot }: { snapshot: RunSnapshot }) {
     debugOpen
       ? h(DebugMenu, { config: runConfig, onApply: applyDebugConfig, speed: speedMode, onToggleSpeed: toggleSpeedMode, onClose: () => setDebugOpen(false) })
       : h('button', { className: 'debug-toggle', onClick: () => setDebugOpen(true), title: 'Open debug menu' }, 'Debug'),
-    h('div', { className: 'hud' },
+    h('div', { className: 'hud world-fighter-overlay' },
       h('div', { className: 'side-column left-side' },
         h(QueuePreview, { queue: snapshot.queue, cacheColor: snapshot.cacheColor, cacheUsedThisTurn: snapshot.cacheUsedThisTurn, onSwapCache }),
-        h(HeroPanel, { heroes: snapshot.heroes, frontlineIndex: snapshot.frontlineIndex, onActivate: onActivateHero, lastAction: snapshot.lastAction })
+        h(SpecialControls, { snapshot })
       ),
       h('div', { className: 'center-help' }, helpText),
       h('div', { className: 'side-column right-side' },
-        h(EnemyPanel, { phase: snapshot.phase, enemy: snapshot.enemy, wave: snapshot.wave, movesLeft: snapshot.movesLeft, score: snapshot.score, credits: snapshot.credits, enemiesDefeated: snapshot.enemiesDefeated, occupiedBlocks: snapshot.occupiedBlocks, coreRadius: snapshot.coreRadius, synergy: snapshot.synergy, lastAction: snapshot.lastAction, onForceAttack, onGrowCore1: () => onGrowCore(1), onGrowCore2: () => onGrowCore(2) }),
-        h('div', { className: 'panel debug-row' },
-          h('span', null, `Selected cell: ${snapshot.selectedCellIndex >= 0 ? snapshot.selectedCellIndex : 'none'}`),
-          h('button', { onClick: restartRun }, 'Restart')
-        )
+        h(RunMiniPanel, { snapshot })
       )
     ),
     h(DarkwebBodega, { open: snapshot.shopOpen, credits: snapshot.credits, selectedCellIndex: snapshot.selectedCellIndex, rerollsUsedThisShop: snapshot.rerollsUsedThisShop, onBuy, onContinue: onContinueAfterShop }),
@@ -410,7 +518,6 @@ webglRenderer.domElement.addEventListener('pointerup', (event: PointerEvent) => 
   pointerIsDown = false;
   try { webglRenderer.domElement.releasePointerCapture(event.pointerId); } catch { }
 
-  // Dragging rotates the Breach object itself. Commit the rotation as one move.
   if (shouldTreatAsRotation) {
     if (dragRotatedBreach && canInteractWithBreach() && run.playerRotateBreach()) {
       playLastActionVisuals();
@@ -421,8 +528,6 @@ webglRenderer.domElement.addEventListener('pointerup', (event: PointerEvent) => 
     return;
   }
 
-  // Hard gate all Breach interaction while shop, KO, enemy-turn, or game-over UI is active.
-  // This prevents clicks through overlays from selecting or placing blocks on the cube.
   if (!canInteractWithBreach()) {
     syncBreachInputEnabled();
     return;
@@ -447,6 +552,7 @@ webglRenderer.domElement.addEventListener('pointerup', (event: PointerEvent) => 
     invalidate(false);
   }
 });
+
 webglRenderer.domElement.addEventListener('pointercancel', (event: PointerEvent) => {
   pointerIsDown = false;
   dragRotatedBreach = false;
@@ -454,7 +560,10 @@ webglRenderer.domElement.addEventListener('pointercancel', (event: PointerEvent)
   try { webglRenderer.domElement.releasePointerCapture(event.pointerId); } catch { }
 });
 
-window.addEventListener('resize', () => { webglRenderer.setSize(window.innerWidth, window.innerHeight); cameraRig.resize(window.innerWidth, window.innerHeight); });
+window.addEventListener('resize', () => {
+  webglRenderer.setSize(window.innerWidth, window.innerHeight);
+  cameraRig.resize(window.innerWidth, window.innerHeight);
+});
 
 function frame(): void {
   requestAnimationFrame(frame);
@@ -462,7 +571,7 @@ function frame(): void {
   if (!paused) TWEEN.update();
   syncBreachInputEnabled();
   cameraRig.update();
-  if (!paused) environmentParticles.rotation.y += 0.0005;
+  syncFighterVisuals();
   if (sceneDirty) { breachRenderer.syncFromBoard(run.board); sceneDirty = false; }
   if (!paused) breachRenderer.update();
   webglRenderer.render(scene, cameraRig.camera);
