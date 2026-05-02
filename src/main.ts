@@ -257,6 +257,67 @@ function onGrowCore(amount: number): void {
   invalidate(true);
 }
 
+function debugDamageEnemy(amount: number): void {
+  clearEnemyTurnTimer();
+  if (run.debugDamageEnemy(amount)) playLastActionVisuals();
+  invalidate(true);
+}
+
+function debugKillEnemy(): void {
+  clearEnemyTurnTimer();
+  if (run.debugKillEnemy()) playLastActionVisuals();
+  invalidate(true);
+}
+
+function debugHealEnemy(): void {
+  clearEnemyTurnTimer();
+  run.debugHealEnemy();
+  invalidate(false);
+}
+
+function debugSpawnWave(wave: number): void {
+  clearKoShopTimer();
+  clearEnemyTurnTimer();
+  run.debugSpawnWave(wave);
+  processedAction = null;
+  invalidate(false);
+}
+
+function debugSetEnemyTimer(moves: number): void {
+  clearEnemyTurnTimer();
+  run.debugSetEnemyAttackTimer(moves);
+  playLastActionVisuals();
+  invalidate(false);
+}
+
+function debugRefillHeroes(): void {
+  run.debugRefillHeroes();
+  invalidate(false);
+}
+
+function debugMaxHeroAp(): void {
+  run.debugMaxHeroAp();
+  invalidate(false);
+}
+
+function debugAddPoints(amount: number): void {
+  run.debugAddPoints(amount);
+  invalidate(false);
+}
+
+const debugRuntimeActions = {
+  damageEnemy: debugDamageEnemy,
+  killEnemy: debugKillEnemy,
+  healEnemy: debugHealEnemy,
+  spawnWave: debugSpawnWave,
+  setEnemyTimer: debugSetEnemyTimer,
+  refillHeroes: debugRefillHeroes,
+  maxHeroAp: debugMaxHeroAp,
+  addPoints: debugAddPoints,
+  forceAttack: onForceAttack,
+  forceCoreGrowth: onGrowCore
+};
+
 function toggleSpeedMode(): void {
   speedMode = !speedMode;
   invalidate(false);
@@ -292,7 +353,8 @@ function renderUi(): void {
     onGrowCore,
     onRestart: restartRun,
     onReturnToDraft: returnToDraft,
-    onCloseCharacterInfo: closeCharacterInfo
+    onCloseCharacterInfo: closeCharacterInfo,
+    debugRuntimeActions
   }));
 }
 

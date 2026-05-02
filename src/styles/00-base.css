@@ -248,3 +248,76 @@ button.speed.enabled { background: linear-gradient(135deg,#8dfcff,#6b6cff); colo
   pointer-events: auto;
   min-width: 84px;
 }
+
+/* --- DEBUG PLAYTESTING PANEL --- */
+.debug-config {
+  width: min(390px, calc(100vw - 32px));
+  max-height: calc(100vh - 48px);
+  overflow: auto;
+}
+.debug-subtitle {
+  margin-top: 2px;
+  color: rgba(255,255,255,.58);
+  font-size: 11px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.debug-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px;
+  border: 1px solid rgba(255,255,255,.10);
+  border-radius: 12px;
+  background: linear-gradient(135deg, rgba(255,255,255,.055), rgba(255,255,255,.018));
+}
+.debug-section h3 {
+  margin: 0 0 2px;
+  color: #8dfcff;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: .12em;
+  text-shadow: 0 0 12px rgba(141,252,255,.35);
+}
+.debug-section.enemy-tuning h3 { color: #ff42d0; text-shadow: 0 0 12px rgba(255,66,208,.35); }
+.debug-section.live-cheats h3 { color: #ffe45e; text-shadow: 0 0 12px rgba(255,228,94,.28); }
+.debug-presets,
+.debug-cheat-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.debug-presets button,
+.debug-cheat-row button,
+.debug-number-row button {
+  padding: 6px 8px;
+  font-size: 10px;
+  border-radius: 8px;
+}
+.debug-number-row {
+  display: grid;
+  grid-template-columns: 64px minmax(64px, 1fr) auto auto;
+  gap: 6px;
+  align-items: center;
+}
+.debug-number-row label {
+  font-size: 11px;
+  color: rgba(255,255,255,.72);
+}
+.debug-number-row input[type='number'] {
+  width: 100%;
+  min-width: 0;
+  padding: 6px 7px;
+  color: #fff;
+  background: rgba(255,255,255,.075);
+  border: 1px solid rgba(255,255,255,.16);
+  border-radius: 8px;
+  outline: none;
+}
+.primary-debug-apply {
+  background: linear-gradient(135deg, #ff42d0, #8dfcff);
+  color: #05040b;
+  font-weight: 1000;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+}

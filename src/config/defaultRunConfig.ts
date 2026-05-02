@@ -18,6 +18,10 @@ export function createDefaultRunConfig(): RunConfig {
     matchMinimum: 3,
     maxChains: 12,
     enemyCoreGrowthChanceMin: 0.25,
-    enemyCoreGrowthChanceMax: 0.25
+    enemyCoreGrowthChanceMax: 0.25,
+    enemyHpMultiplier: 1,
+    enemyDamageMultiplier: 1,
+    enemyAttackEveryMoves: 5,
+    startingWave: 1
   };
 }

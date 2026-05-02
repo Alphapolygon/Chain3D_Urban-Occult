@@ -5,7 +5,7 @@ import type { RunConfig, RunSnapshot } from '../sim/RunState';
 import type { ShopItemId } from '../sim/ShopSystem';
 import { CharacterInfoPopup, type CharacterInfoSelection } from './CharacterInfoPopup';
 import { DarkwebBodega } from './DarkwebBodega';
-import { DebugMenu } from './DebugMenu';
+import { DebugMenu, type DebugRuntimeActions } from './DebugMenu';
 import { DraftScreen } from './DraftScreen';
 import { PostRunScreen } from './PostRunScreen';
 import { QueuePreview } from './QueuePreview';
@@ -31,6 +31,7 @@ type GameAppProps = {
   onRestart: () => void;
   onReturnToDraft: () => void;
   onCloseCharacterInfo: () => void;
+  debugRuntimeActions: DebugRuntimeActions;
 };
 
 export function GameApp(props: GameAppProps) {
@@ -43,7 +44,15 @@ export function GameApp(props: GameAppProps) {
   return (
     <>
       {debugOpen
-        ? <DebugMenu config={props.runConfig} onApply={props.onApplyDebugConfig} speed={props.speedMode} onToggleSpeed={props.onToggleSpeedMode} onClose={() => setDebugOpen(false)} />
+        ? <DebugMenu
+            config={props.runConfig}
+            currentWave={props.snapshot.wave}
+            onApply={props.onApplyDebugConfig}
+            speed={props.speedMode}
+            onToggleSpeed={props.onToggleSpeedMode}
+            onClose={() => setDebugOpen(false)}
+            runtime={props.debugRuntimeActions}
+          />
         : <button className="debug-toggle" onClick={() => setDebugOpen(true)} title="Open debug menu">Debug</button>}
 
       <div className="hud world-fighter-overlay">

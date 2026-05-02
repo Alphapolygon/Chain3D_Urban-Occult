@@ -68,7 +68,8 @@ export class RunState implements ShopRunApi {
     this.matchSystem = new MatchSystem(this.board.cellCount, config.board.colorCount, config.matchMinimum);
     this.snapSystem = new IslandSnapSystem(this.board.cellCount);
     this.heroes = this.draft.map((def) => createHeroState(applyMetaProgressToHeroDefinition(def)));
-    this.enemy = createEnemyState(enemyForWave(1), 1);
+    this.wave = this.normalizedStartingWave();
+    this.enemy = this.createConfiguredEnemy(this.wave);
     this.synergy = rollSynergy(this.heroes, this.rng);
   }
 
@@ -81,11 +82,11 @@ export class RunState implements ShopRunApi {
     this.board.reset(seed);
     this.blockQueue.setRng(this.rng);
     this.heroes = this.draft.map((def) => createHeroState(applyMetaProgressToHeroDefinition(def)));
-    this.phase = 'playing'; this.wave = 1; this.enemiesDefeated = 0; this.frontlineIndex = 0;
+    this.phase = 'playing'; this.wave = this.normalizedStartingWave(); this.enemiesDefeated = 0; this.frontlineIndex = 0;
     this.movesLeft = this.config.movesPerTurn; this.score = 0; this.points = 0; this.matchedBlocks = 0;
     this.extraMovesNextTurn = 0; this.selectedCellIndex = -1; this.lossReason = ''; this.metaXpAwarded = 0; this.metaProgressReport = emptyMetaProgressReport();
     this.cacheColor = null; this.cacheUsedThisTurn = false; this.rerollsUsedThisShop = 0; this.poiseAppliedThisTurn = false; this.pendingEnemyAttackForced = false;
-    this.enemy = createEnemyState(enemyForWave(1), 1);
+    this.enemy = this.createConfiguredEnemy(this.wave);
     this.synergy = rollSynergy(this.heroes, this.rng);
     this.lastAction = { text: `Run started. ${this.synergy.title}`, removed: 0, chain: 0, removedIndices: [] };
     this.log.length = 0; this.addLog(this.lastAction.text);
@@ -232,7 +233,7 @@ export class RunState implements ShopRunApi {
   continueAfterShop(): void {
     if (this.phase !== 'shop') return;
     this.wave++;
-    this.enemy = createEnemyState(enemyForWave(this.wave), this.wave);
+    this.enemy = this.createConfiguredEnemy(this.wave);
     this.movesLeft = this.config.movesPerTurn + this.extraMovesNextTurn;
     this.extraMovesNextTurn = 0;
     this.cacheUsedThisTurn = false;
@@ -260,6 +261,84 @@ export class RunState implements ShopRunApi {
     this.lastAction = { text: `Core expanded ${r.oldRadius} -> ${r.newRadius}. Colored growth blocks spawned; matches wait for player placement.${snapText}`, removed: 0, chain: 0, removedIndices: [], coreGrew: true, snap };
     this.addLog(this.lastAction.text);
     this.checkLossConditions();
+  }
+
+  debugDamageEnemy(amount: number): boolean {
+    if (this.runOver || this.phase === 'shop' || this.phase === 'ko') return false;
+    const requested = Math.max(1, Math.round(amount));
+    const dealt = damageEnemy(this.enemy, requested);
+    this.phase = 'playing';
+    this.pendingEnemyAttackForced = false;
+    this.lastAction = {
+      text: `Debug: dealt ${dealt} damage to ${this.enemy.name}.`,
+      removed: 0,
+      chain: 0,
+      removedIndices: [],
+      playerAttack: dealt > 0,
+      sourceHeroIndex: this.frontlineIndex
+    };
+    this.addLog(this.lastAction.text);
+    this.checkEnemyDefeated();
+    return dealt > 0;
+  }
+
+  debugKillEnemy(): boolean {
+    return this.debugDamageEnemy(Math.max(1, this.enemy.hp));
+  }
+
+  debugHealEnemy(): void {
+    if (this.runOver) return;
+    this.enemy.hp = this.enemy.maxHp;
+    this.enemy.poiseTurns = 0;
+    this.lastAction = { text: `Debug: ${this.enemy.name} fully healed.`, removed: 0, chain: 0, removedIndices: [] };
+    this.addLog(this.lastAction.text);
+  }
+
+  debugSpawnWave(wave: number): void {
+    const nextWave = Math.max(1, Math.floor(wave));
+    this.wave = nextWave;
+    this.enemy = this.createConfiguredEnemy(nextWave);
+    this.phase = 'playing';
+    this.lossReason = '';
+    this.pendingEnemyAttackForced = false;
+    this.poiseAppliedThisTurn = false;
+    this.movesLeft = Math.max(1, this.config.movesPerTurn + this.extraMovesNextTurn);
+    this.lastAction = { text: `Debug: spawned wave ${nextWave} - ${this.enemy.name}.`, removed: 0, chain: 0, removedIndices: [] };
+    this.addLog(this.lastAction.text);
+  }
+
+  debugSetEnemyAttackTimer(moves: number): void {
+    if (this.runOver || this.phase === 'shop' || this.phase === 'ko') return;
+    const timer = Math.max(0, Math.round(moves));
+    this.enemy.attackTimer = timer;
+    this.phase = timer <= 0 ? 'enemy-turn' : 'playing';
+    this.pendingEnemyAttackForced = false;
+    this.lastAction = timer <= 0
+      ? { text: `Debug: enemy timer set to 0. ENEMY TURN. ${this.enemy.name} prepares to strike!`, removed: 0, chain: 0, removedIndices: [], enemyTurn: true }
+      : { text: `Debug: ${this.enemy.name} attack timer set to ${timer} moves.`, removed: 0, chain: 0, removedIndices: [] };
+    this.addLog(this.lastAction.text);
+  }
+
+  debugRefillHeroes(): void {
+    for (const hero of this.heroes) {
+      hero.hp = hero.maxHp;
+      hero.shield = 0;
+    }
+    this.lastAction = { text: 'Debug: all Cleaners healed to full HP.', removed: 0, chain: 0, removedIndices: [] };
+    this.addLog(this.lastAction.text);
+  }
+
+  debugMaxHeroAp(): void {
+    for (const hero of this.heroes) if (hero.hp > 0) hero.ap = hero.maxAp;
+    this.lastAction = { text: 'Debug: all living Cleaners charged to full AP.', removed: 0, chain: 0, removedIndices: [] };
+    this.addLog(this.lastAction.text);
+  }
+
+  debugAddPoints(amount: number): void {
+    const points = Math.max(0, Math.round(amount));
+    this.points += points;
+    this.lastAction = { text: `Debug: added ${points} Bodega points.`, removed: 0, chain: 0, removedIndices: [] };
+    this.addLog(this.lastAction.text);
   }
 
   clearRadius1(index: number): number {
@@ -309,6 +388,27 @@ export class RunState implements ShopRunApi {
       synergy: this.synergy, lastAction: this.lastAction,
       metaXpAwarded: this.metaXpAwarded, metaProgressReport: this.metaProgressReport
     };
+  }
+
+  private normalizedStartingWave(): number {
+    return Math.max(1, Math.floor(this.config.startingWave ?? 1));
+  }
+
+  private createConfiguredEnemy(wave: number): EnemyState {
+    const enemy = createEnemyState(enemyForWave(wave), wave);
+    const hpMultiplier = positiveMultiplier(this.config.enemyHpMultiplier ?? 1);
+    const damageMultiplier = positiveMultiplier(this.config.enemyDamageMultiplier ?? 1);
+    enemy.maxHp = Math.max(1, Math.round(enemy.maxHp * hpMultiplier));
+    enemy.hp = enemy.maxHp;
+    enemy.damage = Math.max(1, Math.round(enemy.damage * damageMultiplier));
+
+    const configuredAttackEvery = this.config.enemyAttackEveryMoves;
+    if (configuredAttackEvery !== undefined) {
+      enemy.attackEveryTurns = Math.max(1, Math.round(configuredAttackEvery));
+      enemy.attackTimer = enemy.attackEveryTurns;
+    }
+
+    return enemy;
   }
 
   private resolveBoardAfterMatches(initialSnap?: IslandSnapResult, seedIndices?: readonly number[]): void {
@@ -536,4 +636,5 @@ export class RunState implements ShopRunApi {
 }
 
 function clamp01(value: number): number { return Math.max(0, Math.min(1, value)); }
+function positiveMultiplier(value: number): number { return Number.isFinite(value) ? Math.max(0.05, value) : 1; }
 

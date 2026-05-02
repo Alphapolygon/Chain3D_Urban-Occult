@@ -49,6 +49,11 @@ export type RunConfig = {
   seed?: number;
   enemyCoreGrowthChanceMin?: number;
   enemyCoreGrowthChanceMax?: number;
+  /** Debug/playtest tuning. Defaults are all neutral. */
+  enemyHpMultiplier?: number;
+  enemyDamageMultiplier?: number;
+  enemyAttackEveryMoves?: number;
+  startingWave?: number;
 };
 
 export type RunSnapshot = {
