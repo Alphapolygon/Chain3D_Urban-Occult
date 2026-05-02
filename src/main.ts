@@ -66,20 +66,21 @@ let loadedMat: THREE.Material | undefined;
 
 gltf.scene.traverse((child) => {
   if (child instanceof THREE.Mesh && !loadedGeo) {
-    loadedGeo = child.geometry.clone();
-    loadedGeo.applyMatrix4(child.matrixWorld);
+    // 1. Use a local variable to satisfy TypeScript's strict null checks
+    const geo = child.geometry.clone();
+    geo.applyMatrix4(child.matrixWorld);
     
     // Center and normalize the imported model so board coordinates, ray hits,
     // preview/effect cubes, and the visible GLB mesh all agree.
-    loadedGeo.computeBoundingBox();
+    geo.computeBoundingBox();
     const center = new THREE.Vector3();
-    loadedGeo.boundingBox!.getCenter(center);
-    loadedGeo.translate(-center.x, -center.y, -center.z);
-    loadedGeo.computeBoundingBox();
+    geo.boundingBox!.getCenter(center);
+    geo.translate(-center.x, -center.y, -center.z);
+    geo.computeBoundingBox();
     const size = new THREE.Vector3();
-    loadedGeo.boundingBox!.getSize(size);
+    geo.boundingBox!.getSize(size);
     const maxDim = Math.max(size.x, size.y, size.z);
-    loadedGeo.scale(0.94 / maxDim, 0.94 / maxDim, 0.94 / maxDim);
+    geo.scale(0.94 / maxDim, 0.94 / maxDim, 0.94 / maxDim);
 
     // Keep the model's baked texture, but apply our neon game-feel to it. Clone
     // the material so rebuilding/disposal never mutates GLTF-loader internals.
@@ -90,6 +91,9 @@ gltf.scene.traverse((child) => {
     mat.emissive = new THREE.Color('#2a1b42');
     mat.emissiveIntensity = 0.6;
     mat.color = new THREE.Color('#ffffff'); // InstancedMesh multiplies this with instanceColor
+    
+    // 2. Assign the fully built local variables to our outer scope
+    loadedGeo = geo;
     loadedMat = mat;
   }
 });
