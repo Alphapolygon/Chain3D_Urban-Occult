@@ -82,8 +82,6 @@ export class BreachRenderer {
     this.group.add(this.edgeMesh);
   }
 
-
-
   rotateByDrag(deltaX: number, deltaY: number): void {
     this.group.rotation.y += deltaX * 0.008;
     this.group.rotation.x = THREE.MathUtils.clamp(this.group.rotation.x + deltaY * 0.008, -1.28, 1.28);
@@ -179,10 +177,9 @@ export class BreachRenderer {
 
   dispose(scene: THREE.Scene): void {
     scene.remove(this.group);
-    this.mesh.geometry.dispose();
+    // cube.glb geometry/material are shared by the Breach, placement previews,
+    // match particles, and AP collection effects. Do not dispose them here.
     this.edgeMesh.geometry.dispose();
-    if (Array.isArray(this.mesh.material)) for (const m of this.mesh.material) m.dispose();
-    else this.mesh.material.dispose();
     if (Array.isArray(this.edgeMesh.material)) for (const m of this.edgeMesh.material) m.dispose();
     else this.edgeMesh.material.dispose();
   }

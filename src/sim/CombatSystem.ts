@@ -1,13 +1,19 @@
 export type HeroRole = 'tank' | 'specialist' | 'striker';
 export type ActivePowerId = 'hex-burst' | 'shield-team' | 'core-stabilize' | 'breach-bomb' | 'queue-hack';
+export type FighterAnimationState = 'idle' | 'attack' | 'hit' | 'die' | 'special';
+export type FighterSpriteSet = Partial<Record<FighterAnimationState, string>>;
 
 export type HeroDefinition = {
-  id: string; name: string; role: HeroRole; color: number; maxHp: number; baseDamage: number; maxAp: number; activePower: ActivePowerId; metaLevel?: number; spriteUrl?: string; attackSpriteUrl?: string;
+  id: string; name: string; role: HeroRole; color: number; maxHp: number; baseDamage: number; maxAp: number; activePower: ActivePowerId; metaLevel?: number;
+  spriteUrl?: string; attackSpriteUrl?: string; hitSpriteUrl?: string; dieSpriteUrl?: string; specialSpriteUrl?: string; sprites?: FighterSpriteSet;
 };
 
 export type HeroState = HeroDefinition & { hp: number; ap: number; shield: number; metaXp: number; };
 
-export type EnemyDefinition = { id: string; name: string; baseHp: number; baseDamage: number; attackEveryTurns: number; growthAmount: 1 | 2; spriteUrl?: string; attackSpriteUrl?: string; };
+export type EnemyDefinition = {
+  id: string; name: string; baseHp: number; baseDamage: number; attackEveryTurns: number; growthAmount: 1 | 2;
+  spriteUrl?: string; attackSpriteUrl?: string; hitSpriteUrl?: string; dieSpriteUrl?: string; specialSpriteUrl?: string; sprites?: FighterSpriteSet;
+};
 export type EnemyState = EnemyDefinition & { wave: number; hp: number; maxHp: number; damage: number; attackTimer: number; poiseTurns: number; };
 
 export type AttackReport = { text: string; totalDamage: number; targetsHit: number; };

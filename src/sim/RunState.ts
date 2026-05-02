@@ -13,6 +13,8 @@ import { tryBuyShopItem, ShopItemId, type ShopRunApi, type ShopItemDefinition } 
 export type RunPhase = 'playing' | 'enemy-turn' | 'ko' | 'shop' | 'dead' | 'containment-failure';
 
 export type RunSynergy = { id: string; title: string; description: string; islandSnapDamageMultiplier: number; };
+export type PowerCollectReport = { heroIndex: number; color: number; amount: number; fromIndices: number[]; };
+
 export type LastActionReport = {
   text: string;
   removed: number;
@@ -24,9 +26,12 @@ export type LastActionReport = {
   playerAttack?: boolean;
   enemyAttack?: boolean;
   enemyDefeated?: boolean;
+  sourceHeroIndex?: number;
+  heroPower?: boolean;
   coreGrew?: boolean;
   invalidPlacement?: boolean;
   enemyTurn?: boolean;
+  powerCollects?: PowerCollectReport[];
 };
 export type RunConfig = {
   board: BreachBoardConfig;
@@ -76,6 +81,14 @@ export class BlockQueue {
 
 type SnapDamageReport = { damage: number; hardKnockdown: boolean; poiseBlocked: boolean; };
 const HARD_KNOCKDOWN_CELL_THRESHOLD = 6;
+
+function indicesForColor(indices: readonly number[], colors: readonly number[], color: number, max = 18): number[] {
+  const result: number[] = [];
+  for (let i = 0; i < indices.length && result.length < max; i++) {
+    if (colors[i] === color) result.push(indices[i]);
+  }
+  return result;
+}
 
 export class RunState implements ShopRunApi {
   readonly config: RunConfig;
@@ -182,9 +195,11 @@ export class RunState implements ShopRunApi {
   }
 
   playerRotateBreach(): boolean {
-    // Rotation is a free inspection action. Only successful placement spends a move
-    // and advances enemy timing.
-    return this.phase === 'playing';
+    if (this.phase !== 'playing') return false;
+    this.consumeMove('Committed rotation.');
+    this.advanceEnemyAfterPlayerMove();
+    this.checkLossConditions();
+    return true;
   }
 
   tryActivateHeroPower(heroIndex: number, targetCellIndex = this.selectedCellIndex): boolean {
@@ -249,7 +264,7 @@ export class RunState implements ShopRunApi {
     }
 
     spendHeroAp(hero);
-    this.lastAction = { text: message, removed, chain, snap, removedIndices, playerAttack, hardKnockdown, poiseBlocked };
+    this.lastAction = { text: message, removed, chain, snap, removedIndices, playerAttack, hardKnockdown, poiseBlocked, sourceHeroIndex: heroIndex, heroPower: true };
     this.addLog(message);
     this.checkEnemyDefeated();
     this.checkLossConditions();
@@ -366,6 +381,7 @@ export class RunState implements ShopRunApi {
     let hardKnockdown = false;
     let poiseBlocked = false;
     const allRemovedIndices: number[] = [];
+    const powerCollects: PowerCollectReport[] = [];
     let currentSeeds: readonly number[] | undefined = seedIndices;
 
     if (initialSnap && initialSnap.clustersMoved > 0) {
@@ -382,7 +398,19 @@ export class RunState implements ShopRunApi {
       chainsResolved = chain;
       totalRemoved += match.removed;
       this.matchedBlocks += match.removed;
+      const apBefore = this.heroes.map((hero) => hero.ap);
       gainApFromMatches(this.heroes, match.colorCounts, match.dominantColor);
+      for (let heroIndex = 0; heroIndex < this.heroes.length; heroIndex++) {
+        const hero = this.heroes[heroIndex];
+        const gained = hero.ap - apBefore[heroIndex];
+        if (gained <= 0 || match.colorCounts[hero.color] <= 0) continue;
+        powerCollects.push({
+          heroIndex,
+          color: hero.color,
+          amount: gained,
+          fromIndices: indicesForColor(match.removedIndices, match.removedColors, hero.color)
+        });
+      }
       this.frontlineIndex = frontlineFromDominantColor(this.heroes, match.dominantColor, this.frontlineIndex);
 
       const scoreGain = this.config.scorePerBlock * match.removed * chain;
@@ -415,7 +443,9 @@ export class RunState implements ShopRunApi {
         removedIndices: allRemovedIndices,
         hardKnockdown,
         poiseBlocked,
-        playerAttack: totalDamage > 0
+        playerAttack: totalDamage > 0,
+        sourceHeroIndex: this.frontlineIndex,
+        powerCollects
       };
       this.addLog(this.lastAction.text);
     }
@@ -475,11 +505,9 @@ export class RunState implements ShopRunApi {
     if (this.phase !== 'playing') return;
     this.pendingEnemyAttackForced = forced;
     this.phase = 'enemy-turn';
-    const previous = this.lastAction;
     const warning = `${forced ? 'Forced: ' : ''}ENEMY TURN. ${this.enemy.name} prepares to strike!`;
-    const shouldAppendPrevious = previous.removed > 0 || !!previous.playerAttack || !!previous.snap?.clustersMoved;
     this.lastAction = {
-      text: shouldAppendPrevious ? `${previous.text} ${warning}` : warning,
+      text: warning,
       removed: 0,
       chain: 0,
       removedIndices: [],

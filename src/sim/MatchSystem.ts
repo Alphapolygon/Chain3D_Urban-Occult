@@ -6,6 +6,7 @@ export type MatchResult = {
   dominantColor: number;
   colorCounts: Int32Array;
   removedIndices: number[];
+  removedColors: number[];
 };
 
 export class MatchSystem {
@@ -40,7 +41,7 @@ export class MatchSystem {
     this.colorCounts.fill(0);
 
     if (!seedIndices || seedIndices.length === 0) {
-      return { removed: 0, dominantColor: 0, colorCounts: this.colorCounts, removedIndices: [] };
+      return { removed: 0, dominantColor: 0, colorCounts: this.colorCounts, removedIndices: [], removedColors: [] };
     }
 
     for (const seed of seedIndices) {
@@ -51,6 +52,7 @@ export class MatchSystem {
     let dominantColor = 0;
     let dominantCount = 0;
     const removedIndices: number[] = [];
+    const removedColors: number[] = [];
 
     for (let i = 0; i < board.cellCount; i++) {
       if (this.removeMask[i] === 0) continue;
@@ -60,6 +62,7 @@ export class MatchSystem {
       this.colorCounts[color]++;
       removed++;
       removedIndices.push(i);
+      removedColors.push(color);
 
       if (this.colorCounts[color] > dominantCount) {
         dominantColor = color;
@@ -67,7 +70,7 @@ export class MatchSystem {
       }
     }
 
-    return { removed, dominantColor, colorCounts: this.colorCounts, removedIndices };
+    return { removed, dominantColor, colorCounts: this.colorCounts, removedIndices, removedColors };
   }
 
   private tryMarkConnectedGroup(board: BreachBoard, seed: number): void {
