@@ -1,0 +1,37 @@
+/* --- GIF BACKDROP STAGE ---
+   The 3D city/floor meshes are removed from the scene. The arena now uses
+   a lightweight animated bg.gif behind the transparent WebGL canvas. Replace
+   src/assets/bg.gif with final art when available. */
+#scene-root {
+  background: #05040a;
+  isolation: isolate;
+}
+#scene-root::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image: url('../assets/bg.gif');
+  background-position: center center;
+  background-size: cover;
+  background-repeat: no-repeat;
+  filter: saturate(1.24) contrast(1.08) brightness(0.78);
+  transform: scale(1.015);
+}
+#scene-root::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 50% 42%, rgba(5,4,10,0.02), rgba(5,4,10,0.22) 46%, rgba(2,1,6,0.70) 100%),
+    linear-gradient(180deg, rgba(255,66,208,0.08), transparent 22%, rgba(39,231,255,0.05) 82%, rgba(0,0,0,0.32));
+  mix-blend-mode: normal;
+}
+#scene-root canvas {
+  position: relative;
+  z-index: 2;
+  background: transparent !important;
+}

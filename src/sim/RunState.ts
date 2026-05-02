@@ -1,8 +1,10 @@
 import { enemyForWave } from '../data/enemies';
 import { getShopItem } from '../data/shopItems';
 import { applyMetaProgressToHeroDefinition, awardRunMetaProgress, emptyMetaProgressReport, type MetaProgressReport } from '../data/metaProgress';
-import type { BreachBoardConfig } from './BreachBoard';
 import { BreachBoard, Mulberry32 } from './BreachBoard';
+import { BlockQueue } from './BlockQueue';
+import { rollSynergy } from './Synergies';
+import type { LastActionReport, PowerCollectReport, RunConfig, RunPhase, RunSnapshot, RunSynergy } from './RunTypes';
 import { isDestructible } from './CellBits';
 import { allHeroesDown, applyEnemyAttack, awardMetaXp, canUseHeroPower, computeMatchDamage, createEnemyState, createHeroState, damageEnemy, frontlineFromDominantColor, gainApFromMatches, shieldTeam, spendHeroAp, type EnemyState, type HeroDefinition, type HeroState } from './CombatSystem';
 import { expandStaticCore, shrinkStaticCore } from './CoreGrowthSystem';
@@ -10,75 +12,8 @@ import { IslandSnapSystem, type IslandSnapResult } from './IslandSnapSystem';
 import { MatchSystem } from './MatchSystem';
 import { tryBuyShopItem, ShopItemId, type ShopRunApi, type ShopItemDefinition } from './ShopSystem';
 
-export type RunPhase = 'playing' | 'enemy-turn' | 'ko' | 'shop' | 'dead' | 'containment-failure';
-
-export type RunSynergy = { id: string; title: string; description: string; islandSnapDamageMultiplier: number; };
-export type PowerCollectReport = { heroIndex: number; color: number; amount: number; fromIndices: number[]; };
-
-export type LastActionReport = {
-  text: string;
-  removed: number;
-  chain: number;
-  snap?: IslandSnapResult;
-  removedIndices?: number[];
-  hardKnockdown?: boolean;
-  poiseBlocked?: boolean;
-  playerAttack?: boolean;
-  enemyAttack?: boolean;
-  enemyTargetIndices?: number[];
-  enemyDefeated?: boolean;
-  sourceHeroIndex?: number;
-  heroPower?: boolean;
-  coreGrew?: boolean;
-  invalidPlacement?: boolean;
-  enemyTurn?: boolean;
-  powerCollects?: PowerCollectReport[];
-};
-export type RunConfig = {
-  board: BreachBoardConfig;
-  movesPerTurn: number;
-  queueLength: number;
-  scorePerBlock: number;
-  matchMinimum: number;
-  maxChains: number;
-  seed?: number;
-  enemyCoreGrowthChanceMin?: number;
-  enemyCoreGrowthChanceMax?: number;
-};
-export type RunSnapshot = {
-  phase: RunPhase; shopOpen: boolean; runOver: boolean; lossReason: string;
-  heroes: HeroState[]; enemy: EnemyState; queue: number[]; cacheColor: number | null; cacheUsedThisTurn: boolean; frontlineIndex: number;
-  wave: number; movesLeft: number; score: number; points: number; credits: number; enemiesDefeated: number; rerollsUsedThisShop: number;
-  occupiedBlocks: number; coreRadius: number; selectedCellIndex: number; synergy: RunSynergy; lastAction: LastActionReport;
-  metaXpAwarded: number; metaProgressReport: MetaProgressReport;
-};
-
-export class BlockQueue {
-  readonly colors: Int32Array;
-  private colorCount: number;
-  private rng: Mulberry32;
-
-  constructor(length: number, colorCount: number, rng: Mulberry32) {
-    this.colors = new Int32Array(Math.max(1, length));
-    this.colorCount = colorCount;
-    this.rng = rng;
-    this.rerollAll();
-  }
-
-  setRng(rng: Mulberry32): void { this.rng = rng; this.rerollAll(); }
-  peek(offset = 0): number { return this.colors[Math.max(0, Math.min(this.colors.length - 1, offset | 0))]; }
-  setNext(color: number): void { this.colors[0] = color; }
-  consume(): number {
-    const c = this.colors[0];
-    for (let i = 1; i < this.colors.length; i++) this.colors[i - 1] = this.colors[i];
-    this.colors[this.colors.length - 1] = this.randomColor();
-    return c;
-  }
-  rerollNext(): void { this.colors[0] = this.randomColor(); }
-  rerollAll(): void { for (let i = 0; i < this.colors.length; i++) this.colors[i] = this.randomColor(); }
-  toArray(): number[] { return Array.from(this.colors); }
-  private randomColor(): number { return 1 + Math.floor(this.rng.next() * this.colorCount); }
-}
+export { BlockQueue } from './BlockQueue';
+export type { LastActionReport, PowerCollectReport, RunConfig, RunPhase, RunSnapshot, RunSynergy } from './RunTypes';
 
 type SnapDamageReport = { damage: number; hardKnockdown: boolean; poiseBlocked: boolean; };
 const HARD_KNOCKDOWN_CELL_THRESHOLD = 6;
@@ -602,12 +537,3 @@ export class RunState implements ShopRunApi {
 
 function clamp01(value: number): number { return Math.max(0, Math.min(1, value)); }
 
-function rollSynergy(heroes: readonly HeroState[], rng: Mulberry32): RunSynergy {
-  const ids = new Set(heroes.map((h) => h.id));
-  if (ids.has('courier') && ids.has('hacker')) return { id: 'courier-hacker', title: 'Courier x Hacker', description: 'Island Snaps deal 50% more damage this run.', islandSnapDamageMultiplier: 1.5 };
-  if (ids.has('bouncer') && ids.has('tagger')) return { id: 'bouncer-tagger', title: 'Bouncer x Tagger', description: 'Island Snaps deal 35% more damage this run.', islandSnapDamageMultiplier: 1.35 };
-  const roll = rng.next();
-  if (roll < 0.33) return { id: 'neon-ritual', title: 'Neon Ritual', description: 'Island Snaps deal 20% more damage.', islandSnapDamageMultiplier: 1.2 };
-  if (roll < 0.66) return { id: 'clean-route', title: 'Clean Route', description: 'Default snap damage. Draft carried by fundamentals.', islandSnapDamageMultiplier: 1.0 };
-  return { id: 'bad-omens', title: 'Bad Omens', description: 'Island Snaps deal 10% less damage, but the run pays full meta-XP.', islandSnapDamageMultiplier: 0.9 };
-}

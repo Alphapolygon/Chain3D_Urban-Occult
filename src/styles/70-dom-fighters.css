@@ -1,0 +1,118 @@
+/* --- DOM-BASED WORLD HUD --- */
+.fighter-world-hud {
+  position: fixed;
+  pointer-events: none;
+  transform: translate(-50%, -100%);
+  width: 200px;
+  background: linear-gradient(90deg, rgba(5,4,12,0.92), rgba(5,4,12,0.20), transparent);
+  border-left: 3px solid rgba(255,255,255,0.4);
+  padding: 6px 10px;
+  border-radius: 4px;
+  text-shadow: 0 1px 3px #000;
+  will-change: left, top;
+}
+.fighter-world-hud.enemy {
+  width: 260px;
+  background: linear-gradient(-90deg, rgba(5,4,12,0.92), rgba(5,4,12,0.20), transparent);
+  border-left: none;
+  border-right: 3px solid #ff49d8;
+  text-align: right;
+}
+.fighter-world-hud .hud-header {
+  margin-bottom: 5px;
+  font-size: 11px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+.fighter-world-hud .hud-bar {
+  height: 5px;
+  background: rgba(255,255,255,0.1);
+  margin-bottom: 5px;
+  border-radius: 2px;
+  overflow: hidden;
+  box-shadow: inset 0 1px 3px rgba(0,0,0,0.8);
+}
+.fighter-world-hud .fill {
+  height: 100%;
+  transition: width 0.2s ease-out;
+}
+.fighter-world-hud .hp-fill { box-shadow: 0 0 8px currentColor; }
+.fighter-world-hud .ap-fill { box-shadow: 0 0 8px currentColor; }
+.fighter-world-hud .hud-timer {
+  font-size: 11px;
+  font-weight: 900;
+  margin-top: 4px;
+  letter-spacing: 0.05em;
+}
+
+.fighter-dom-sprite.enemy {
+  /* Removed the 330px height override! */
+  transform: translate(-50%, -100%) scaleX(-1);
+  filter: drop-shadow(0 24px 24px rgba(0,0,0,.9)) drop-shadow(0 0 24px rgba(255,66,208,.55));
+}
+
+/* --- Fighter sprite state animations ---
+   If files like bouncer_attack.gif, bouncer_hit.gif, or bouncer_die.gif exist,
+   the code swaps to those GIFs. These CSS pulses are fallback feedback when only
+   the idle GIF exists. */
+.fighter-dom-sprite.state-attack,
+.fighter-dom-sprite.attack-pop {
+  animation: fighter-attack-pop .42s cubic-bezier(.2, 1.25, .2, 1);
+}
+.fighter-dom-sprite.state-special,
+.fighter-dom-sprite.special-pop {
+  animation: fighter-special-pop .7s cubic-bezier(.12, 1.12, .18, 1);
+  filter: drop-shadow(0 18px 18px rgba(0,0,0,.82)) drop-shadow(0 0 38px rgba(255,228,94,.95)) brightness(1.32) saturate(1.35);
+}
+.fighter-dom-sprite.state-hit {
+  animation: fighter-take-hit .34s steps(2, end);
+}
+.fighter-dom-sprite.state-die,
+.fighter-dom-sprite.death-pop {
+  animation: fighter-death-pop .9s ease-out forwards;
+}
+.fighter-dom-sprite.enemy.state-attack,
+.fighter-dom-sprite.enemy.attack-pop {
+  animation: enemy-attack-pop .48s cubic-bezier(.2, 1.25, .2, 1);
+}
+.fighter-dom-sprite.enemy.state-special,
+.fighter-dom-sprite.enemy.special-pop {
+  animation: enemy-attack-pop .7s cubic-bezier(.12, 1.12, .18, 1);
+  filter: drop-shadow(0 24px 24px rgba(0,0,0,.9)) drop-shadow(0 0 44px rgba(255,66,208,.95)) brightness(1.3) saturate(1.4);
+}
+@keyframes fighter-attack-pop {
+  0% { transform: translate(-50%, -100%) translateX(0) scale(1); }
+  42% { transform: translate(-50%, -100%) translateX(34px) scale(1.08); }
+  100% { transform: translate(-50%, -100%) translateX(0) scale(1); }
+}
+@keyframes enemy-attack-pop {
+  0% { transform: translate(-50%, -100%) scaleX(-1) translateX(0) scale(1); }
+  42% { transform: translate(-50%, -100%) scaleX(-1) translateX(38px) scale(1.08); }
+  100% { transform: translate(-50%, -100%) scaleX(-1) translateX(0) scale(1); }
+}
+@keyframes fighter-special-pop {
+  0% { transform: translate(-50%, -100%) scale(1); }
+  30% { transform: translate(-50%, -100%) scale(1.16) rotate(-2deg); }
+  62% { transform: translate(-50%, -100%) scale(1.06) rotate(2deg); }
+  100% { transform: translate(-50%, -100%) scale(1); }
+}
+@keyframes fighter-take-hit {
+  0% { transform: translate(-50%, -100%) translateX(0); filter: brightness(1); }
+  35% { transform: translate(-50%, -100%) translateX(-18px); filter: brightness(2.3) saturate(1.8) drop-shadow(0 0 28px #fff); }
+  70% { transform: translate(-50%, -100%) translateX(10px); }
+  100% { transform: translate(-50%, -100%) translateX(0); filter: brightness(1); }
+}
+@keyframes fighter-death-pop {
+  0% { opacity: 1; transform: translate(-50%, -100%) rotate(0deg) scale(1); filter: brightness(1.6) saturate(1.6); }
+  45% { opacity: .84; transform: translate(-50%, -100%) rotate(-6deg) scale(1.03); }
+  100% { opacity: .42; transform: translate(-50%, -100%) rotate(-12deg) scale(.96); filter: grayscale(1) brightness(.74); }
+}
+.fighter-dom-sprite.enemy.state-die,
+.fighter-dom-sprite.enemy.death-pop {
+  animation: enemy-death-pop 1.05s ease-out forwards;
+}
+@keyframes enemy-death-pop {
+  0% { opacity: 1; transform: translate(-50%, -100%) scaleX(-1) rotate(0deg) scale(1); filter: brightness(1.8) saturate(1.8); }
+  40% { opacity: .9; transform: translate(-50%, -100%) scaleX(-1) rotate(5deg) scale(1.06); }
+  100% { opacity: .36; transform: translate(-50%, -100%) scaleX(-1) rotate(13deg) scale(.98); filter: grayscale(1) brightness(.65); }
+}

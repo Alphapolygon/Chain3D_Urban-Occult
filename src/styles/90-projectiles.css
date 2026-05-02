@@ -1,0 +1,79 @@
+/* --- Projectile attack VFX --- */
+.attack-projectile,
+.attack-projectile-trail {
+  position: fixed;
+  left: 0;
+  top: 0;
+  pointer-events: none;
+  z-index: 22000;
+  transform-origin: center center;
+}
+
+.attack-projectile {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  mix-blend-mode: screen;
+  filter: blur(0.2px) drop-shadow(0 0 18px currentColor) drop-shadow(0 0 38px currentColor);
+}
+
+.attack-projectile::before,
+.attack-projectile::after {
+  content: '';
+  position: absolute;
+  inset: -8px;
+  border-radius: 50%;
+  background: radial-gradient(circle, #fff 0 12%, currentColor 35%, transparent 68%);
+  animation: projectile-spin 0.18s linear infinite;
+}
+
+.attack-projectile::after {
+  inset: 6px 22px 6px -34px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, transparent, currentColor, #fff);
+  opacity: 0.82;
+  animation: none;
+}
+
+.attack-projectile.player {
+  color: #8dfcff;
+  background: radial-gradient(circle, #ffffff 0 8%, #8dfcff 35%, #ff42d0 72%, transparent 74%);
+}
+
+.attack-projectile.enemy {
+  color: #ff375f;
+  background: radial-gradient(circle, #fff0b8 0 8%, #ff7a2f 32%, #ff375f 72%, transparent 74%);
+}
+
+.attack-projectile.impact {
+  animation: projectile-impact 0.18s ease-out forwards;
+}
+
+.attack-projectile-trail {
+  height: 12px;
+  width: 24px;
+  border-radius: 999px;
+  transform-origin: left center;
+  mix-blend-mode: screen;
+  filter: blur(1px) drop-shadow(0 0 16px currentColor);
+}
+
+.attack-projectile-trail.player {
+  color: #8dfcff;
+  background: linear-gradient(90deg, rgba(141,252,255,0), rgba(141,252,255,.55), rgba(255,66,208,.95));
+}
+
+.attack-projectile-trail.enemy {
+  color: #ff375f;
+  background: linear-gradient(90deg, rgba(255,55,95,0), rgba(255,122,47,.65), rgba(255,55,95,.98));
+}
+
+@keyframes projectile-spin {
+  from { transform: rotate(0deg) scale(1); }
+  to { transform: rotate(360deg) scale(1.08); }
+}
+
+@keyframes projectile-impact {
+  from { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  to { opacity: 0; transform: translate(-50%, -50%) scale(2.6); }
+}

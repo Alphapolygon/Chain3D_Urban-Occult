@@ -1,0 +1,262 @@
+/* --- Game feel patch: power-ready, attacks, KO, invalid placement --- */
+.hero-card.power-ready {
+  border-color: rgba(141,252,255,.98);
+  box-shadow: 0 0 26px rgba(141,252,255,.34), 0 0 42px rgba(255,66,208,.18), inset 0 0 20px rgba(141,252,255,.08);
+  animation: power-ready-pulse 1.05s ease-in-out infinite alternate;
+}
+.power-ready-badge {
+  margin-top: 6px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  width: max-content;
+  color: #05040b;
+  background: linear-gradient(90deg, #8dfcff, #ff42d0);
+  font-size: 10px;
+  font-weight: 1000;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  box-shadow: 0 0 18px rgba(141,252,255,.55);
+}
+button.ready-button {
+  background: linear-gradient(135deg,#8dfcff,#ff42d0,#ffe45e);
+  color: #05040b;
+  box-shadow: 0 0 22px rgba(141,252,255,.46), 0 8px 24px rgba(255,66,208,.26);
+}
+.hero-panel.enemy-hit {
+  animation: hero-panel-hit .28s steps(2, end);
+}
+.enemy-panel.enemy-hit {
+  animation: enemy-hit .24s steps(2, end);
+  border-color: rgba(141,252,255,.88);
+  box-shadow: 0 0 34px rgba(141,252,255,.32), 0 0 48px rgba(255,66,208,.20);
+}
+.enemy-panel.enemy-ko {
+  filter: saturate(1.35) contrast(1.15);
+  border-color: rgba(255,255,255,.98);
+  box-shadow: 0 0 44px rgba(255,73,216,.58), 0 0 70px rgba(141,252,255,.34), inset 0 0 32px rgba(255,255,255,.08);
+  animation: enemy-ko .92s cubic-bezier(.2, 1.6, .25, 1) both;
+}
+.ko-banner {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%) rotate(-4deg);
+  z-index: 1200;
+  pointer-events: none;
+  font-size: clamp(46px, 8vw, 112px);
+  font-weight: 1000;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: #fff;
+  text-shadow: 0 0 18px #ff42d0, 0 0 52px #8dfcff, 4px 4px 0 #05040b;
+  animation: ko-banner .95s cubic-bezier(.16, 1.28, .3, 1) both;
+}
+.combat-slash {
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+  pointer-events: none;
+  display: grid;
+  place-items: center;
+  font-size: clamp(36px, 7vw, 110px);
+  font-weight: 1000;
+  letter-spacing: .18em;
+  text-transform: uppercase;
+  color: #fff;
+  mix-blend-mode: screen;
+}
+.combat-slash::before,
+.combat-slash::after {
+  content: '';
+  position: absolute;
+  left: -20vw;
+  right: -20vw;
+  top: 48%;
+  height: 9px;
+  border-radius: 999px;
+  transform-origin: center;
+  filter: blur(.2px);
+}
+.combat-slash.player::before {
+  background: linear-gradient(90deg, transparent, #8dfcff, #ff42d0, transparent);
+  transform: rotate(-16deg) translateX(-42vw);
+  animation: slash-player .42s ease-out both;
+  box-shadow: 0 0 24px #8dfcff, 0 0 46px #ff42d0;
+}
+.combat-slash.enemy::before {
+  background: linear-gradient(90deg, transparent, #ff375f, #ffe45e, transparent);
+  transform: rotate(16deg) translateX(42vw);
+  animation: slash-enemy .46s ease-out both;
+  box-shadow: 0 0 24px #ff375f, 0 0 46px #ffe45e;
+}
+.combat-slash.ko {
+  text-shadow: 0 0 18px #ff42d0, 0 0 42px #8dfcff, 3px 3px 0 #05040b;
+  animation: slash-ko-text 1s cubic-bezier(.16, 1.28, .3, 1) both;
+}
+.combat-slash.ko::before {
+  background: linear-gradient(90deg, transparent, #fff, #ff42d0, #8dfcff, transparent);
+  transform: rotate(-9deg);
+  animation: slash-ko .75s ease-out both;
+  height: 13px;
+  box-shadow: 0 0 36px #fff, 0 0 72px #ff42d0;
+}
+.combat-slash.invalid {
+  color: #ff4e5f;
+  text-shadow: 0 0 14px #ff4e5f, 3px 3px 0 #05040b;
+  animation: invalid-pop .46s ease-out both;
+}
+.combat-slash.invalid::before {
+  background: linear-gradient(90deg, transparent, #ff4e5f, transparent);
+  transform: rotate(0deg);
+  height: 5px;
+  opacity: .8;
+}
+
+@keyframes power-ready-pulse { from { transform: translateX(0); } to { transform: translateX(5px); } }
+@keyframes hero-panel-hit { 0% { transform: translateX(0); } 25% { transform: translateX(-10px); } 50% { transform: translateX(8px); } 100% { transform: translateX(0); } }
+@keyframes enemy-hit { 0% { transform: translateX(0); } 25% { transform: translateX(12px); } 50% { transform: translateX(-8px); } 100% { transform: translateX(0); } }
+@keyframes enemy-ko { 0% { transform: translateX(0) scale(1); opacity: 1; } 35% { transform: translateX(18px) rotate(1deg) scale(1.04); } 100% { transform: translateX(0) rotate(-1.5deg) scale(.97); opacity: .72; } }
+@keyframes ko-banner { 0% { opacity: 0; transform: translate(-50%, -50%) scale(.55) rotate(-12deg); } 18% { opacity: 1; transform: translate(-50%, -50%) scale(1.1) rotate(-4deg); } 100% { opacity: 0; transform: translate(-50%, -50%) scale(1.02) rotate(-4deg); } }
+@keyframes slash-player { 0% { opacity: 0; transform: rotate(-16deg) translateX(-42vw); } 24% { opacity: 1; } 100% { opacity: 0; transform: rotate(-16deg) translateX(42vw); } }
+@keyframes slash-enemy { 0% { opacity: 0; transform: rotate(16deg) translateX(42vw); } 24% { opacity: 1; } 100% { opacity: 0; transform: rotate(16deg) translateX(-42vw); } }
+@keyframes slash-ko { 0% { opacity: 0; transform: rotate(-9deg) scaleX(.2); } 22% { opacity: 1; } 100% { opacity: 0; transform: rotate(-9deg) scaleX(1.2); } }
+@keyframes slash-ko-text { 0% { opacity: 0; transform: scale(.42) rotate(-9deg); } 20% { opacity: 1; transform: scale(1.08) rotate(-4deg); } 100% { opacity: 0; transform: scale(1.18) rotate(-4deg); } }
+@keyframes invalid-pop { 0% { opacity: 0; transform: scale(.72); } 22% { opacity: 1; transform: scale(1.05); } 100% { opacity: 0; transform: scale(1.0); } }
+
+/* --- Enemy turn and panel-anchored combat VFX patch --- */
+.hero-panel,
+.enemy-panel,
+.center-help {
+  position: relative;
+  overflow: visible;
+}
+.enemy-panel.enemy-turn {
+  border-color: rgba(255, 228, 94, .95);
+  box-shadow: 0 0 34px rgba(255, 228, 94, .32), 0 0 52px rgba(255, 55, 95, .18), inset 0 0 24px rgba(255, 228, 94, .08);
+  animation: enemy-turn-warning .62s steps(2, end) infinite;
+}
+.enemy-turn-banner {
+  position: fixed;
+  left: 50%;
+  top: 20%;
+  transform: translate(-50%, -50%) rotate(-3deg);
+  z-index: 1200;
+  pointer-events: none;
+  font-size: clamp(36px, 6vw, 86px);
+  font-weight: 1000;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  color: #ffe45e;
+  text-shadow: 0 0 16px #ff375f, 0 0 42px #ffe45e, 4px 4px 0 #05040b;
+  animation: enemy-turn-banner .7s cubic-bezier(.16, 1.28, .3, 1) both;
+}
+.combat-slash {
+  position: absolute;
+  inset: -28px;
+  z-index: 20;
+  pointer-events: none;
+  display: grid;
+  place-items: center;
+  font-size: clamp(26px, 4vw, 68px);
+  font-weight: 1000;
+  letter-spacing: .18em;
+  text-transform: uppercase;
+  color: #fff;
+  mix-blend-mode: screen;
+  overflow: visible;
+}
+.combat-slash::before,
+.combat-slash::after {
+  left: -14%;
+  right: -14%;
+  top: 50%;
+  height: 8px;
+}
+.center-help .combat-slash {
+  inset: -20px -90px;
+}
+@keyframes enemy-turn-warning { 0% { transform: translateX(0); } 50% { transform: translateX(-5px); } 100% { transform: translateX(0); } }
+@keyframes enemy-turn-banner { 0% { opacity: 0; transform: translate(-50%, -50%) scale(.76) rotate(-7deg); } 28% { opacity: 1; transform: translate(-50%, -50%) scale(1.08) rotate(-3deg); } 100% { opacity: 0; transform: translate(-50%, -50%) scale(1.02) rotate(-3deg); } }
+@keyframes slash-player { 0% { opacity: 0; transform: rotate(-16deg) translateX(-125%); } 24% { opacity: 1; } 100% { opacity: 0; transform: rotate(-16deg) translateX(125%); } }
+@keyframes slash-enemy { 0% { opacity: 0; transform: rotate(16deg) translateX(125%); } 24% { opacity: 1; } 100% { opacity: 0; transform: rotate(16deg) translateX(-125%); } }
+
+/* Final anchored combat effect override: effects are positioned over character UI, not the cube. */
+.combat-slash {
+  position: fixed;
+  inset: auto;
+  z-index: 1300;
+  pointer-events: none;
+  display: grid;
+  place-items: center;
+  font-size: clamp(24px, 4vw, 72px);
+  font-weight: 1000;
+  letter-spacing: .18em;
+  text-transform: uppercase;
+  color: #fff;
+  mix-blend-mode: screen;
+  overflow: visible;
+}
+.combat-slash::before,
+.combat-slash::after {
+  left: -16%;
+  right: -16%;
+  top: 50%;
+}
+.combat-slash.enemy-turn {
+  color: #ffe45e;
+  text-shadow: 0 0 14px #ff375f, 0 0 34px #ffe45e, 3px 3px 0 #05040b;
+  animation: enemy-turn-banner .72s cubic-bezier(.16, 1.28, .3, 1) both;
+}
+.combat-slash.enemy-turn::before {
+  background: linear-gradient(90deg, transparent, #ff375f, #ffe45e, transparent);
+  transform: rotate(0deg) scaleX(.9);
+  animation: slash-ko .58s ease-out both;
+  height: 8px;
+  box-shadow: 0 0 24px #ff375f, 0 0 44px #ffe45e;
+}
+.combat-slash.anchor-enemy,
+.combat-slash.anchor-heroes {
+  transform-origin: center;
+}
+
+/* --- Text timing and panel-anchored strike VFX pass --- */
+.combat-slash.panel-anchored {
+  position: absolute;
+  inset: -34px;
+  left: auto !important;
+  top: auto !important;
+  width: auto !important;
+  height: auto !important;
+  z-index: 60;
+}
+.combat-slash.screen-anchored {
+  position: fixed;
+  inset: auto;
+  z-index: 1300;
+}
+.combat-slash.panel-anchored::before,
+.combat-slash.panel-anchored::after {
+  left: -10%;
+  right: -10%;
+  top: 50%;
+}
+.combat-slash.panel-anchored.player::before,
+.combat-slash.panel-anchored.enemy::before {
+  height: 10px;
+  animation-duration: .62s;
+}
+.combat-slash.panel-anchored.enemy-turn {
+  animation-duration: 1.08s;
+}
+.combat-slash.panel-anchored.ko {
+  animation-duration: 1.35s;
+}
+.combat-slash.screen-anchored.invalid {
+  animation-duration: 1s;
+}
+.enemy-turn-banner {
+  animation-duration: 1.08s;
+}
+.ko-banner {
+  animation-duration: 1.35s;
+}
