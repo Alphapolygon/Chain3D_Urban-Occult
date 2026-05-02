@@ -16,7 +16,7 @@ export type EnemyDefinition = {
 };
 export type EnemyState = EnemyDefinition & { wave: number; hp: number; maxHp: number; damage: number; attackTimer: number; poiseTurns: number; };
 
-export type AttackReport = { text: string; totalDamage: number; targetsHit: number; };
+export type AttackReport = { text: string; totalDamage: number; targetsHit: number; targetIndices: number[]; };
 
 export function createHeroState(def: HeroDefinition): HeroState {
   const level = Math.max(1, def.metaLevel ?? 1);
@@ -29,7 +29,7 @@ export function createEnemyState(def: EnemyDefinition, wave: number): EnemyState
   const maxHp = Math.round(def.baseHp + wave * 42 + Math.pow(wave, 1.22) * 18);
   const damage = Math.round(def.baseDamage + wave * 6 + Math.floor(wave / 4) * 9);
   const attackCadence = Math.max(5, def.attackEveryTurns | 0);
-  return { ...def, attackEveryTurns: attackCadence, wave, hp: maxHp, maxHp, damage, attackTimer: attackCadence, poiseTurns: 0 };
+  return { ...def, growthAmount: 1, attackEveryTurns: attackCadence, wave, hp: maxHp, maxHp, damage, attackTimer: attackCadence, poiseTurns: 0 };
 }
 
 export function damageEnemy(enemy: EnemyState, amount: number): number {
@@ -76,28 +76,34 @@ export function computeMatchDamage(removed: number, chain: number, frontline: He
 
 export function applyEnemyAttack(heroes: HeroState[], enemy: EnemyState, frontlineIndex: number): AttackReport {
   const alive = heroes.map((h, i) => ({ h, i })).filter((x) => x.h.hp > 0);
-  if (alive.length === 0) return { text: 'No living targets.', totalDamage: 0, targetsHit: 0 };
+  if (alive.length === 0) return { text: 'No living targets.', totalDamage: 0, targetsHit: 0, targetIndices: [] };
 
   const frontline = heroes[frontlineIndex]?.hp > 0 ? heroes[frontlineIndex] : alive[0].h;
   const tankMitigation = frontline.role === 'tank' ? 0.66 : 1;
   let total = 0;
-  let targets = 0;
+  const targetIndices: number[] = [];
+  const frontlineResolvedIndex = heroes.findIndex((h) => h === frontline);
 
   if (enemy.wave <= 5) {
     total += damageHero(frontline, enemy.damage * tankMitigation);
-    targets = 1;
+    if (frontlineResolvedIndex >= 0) targetIndices.push(frontlineResolvedIndex);
   } else if (enemy.wave <= 10) {
     total += damageHero(frontline, enemy.damage * tankMitigation);
-    const backline = alive.find((x) => x.h !== frontline)?.h;
-    if (backline) { total += damageHero(backline, enemy.damage * 0.45); targets = 2; } else targets = 1;
+    if (frontlineResolvedIndex >= 0) targetIndices.push(frontlineResolvedIndex);
+    const backline = alive.find((x) => x.h !== frontline);
+    if (backline) {
+      total += damageHero(backline.h, enemy.damage * 0.45);
+      targetIndices.push(backline.i);
+    }
   } else {
-    for (const { h } of alive) {
+    for (const { h, i } of alive) {
       total += damageHero(h, h === frontline ? enemy.damage * tankMitigation : enemy.damage * 0.72);
-      targets++;
+      targetIndices.push(i);
     }
   }
 
-  return { text: `${enemy.name} hit ${targets} hero${targets === 1 ? '' : 'es'} for ${total}.`, totalDamage: total, targetsHit: targets };
+  const targets = targetIndices.length;
+  return { text: `${enemy.name} hit ${targets} hero${targets === 1 ? '' : 'es'} for ${total}.`, totalDamage: total, targetsHit: targets, targetIndices };
 }
 
 export function allHeroesDown(heroes: readonly HeroState[]): boolean { return heroes.every((h) => h.hp <= 0); }

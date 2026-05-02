@@ -3,7 +3,7 @@ import { getShopItem } from '../data/shopItems';
 import { applyMetaProgressToHeroDefinition, awardRunMetaProgress, emptyMetaProgressReport, type MetaProgressReport } from '../data/metaProgress';
 import type { BreachBoardConfig } from './BreachBoard';
 import { BreachBoard, Mulberry32 } from './BreachBoard';
-import { isDestructible, isOccupied } from './CellBits';
+import { isDestructible } from './CellBits';
 import { allHeroesDown, applyEnemyAttack, awardMetaXp, canUseHeroPower, computeMatchDamage, createEnemyState, createHeroState, damageEnemy, frontlineFromDominantColor, gainApFromMatches, shieldTeam, spendHeroAp, type EnemyState, type HeroDefinition, type HeroState } from './CombatSystem';
 import { expandStaticCore, shrinkStaticCore } from './CoreGrowthSystem';
 import { IslandSnapSystem, type IslandSnapResult } from './IslandSnapSystem';
@@ -25,6 +25,7 @@ export type LastActionReport = {
   poiseBlocked?: boolean;
   playerAttack?: boolean;
   enemyAttack?: boolean;
+  enemyTargetIndices?: number[];
   enemyDefeated?: boolean;
   sourceHeroIndex?: number;
   heroPower?: boolean;
@@ -195,10 +196,10 @@ export class RunState implements ShopRunApi {
   }
 
   playerRotateBreach(): boolean {
+    // Rotation is only a tactical view action. It never spends a move and never
+    // advances enemy attack timing.
     if (this.phase !== 'playing') return false;
-    this.consumeMove('Committed rotation.');
-    this.advanceEnemyAfterPlayerMove();
-    this.checkLossConditions();
+    this.lastAction = { text: `Rotated Breach. ${this.enemy.name} attacks in ${this.enemy.attackTimer} moves.`, removed: 0, chain: 0, removedIndices: [] };
     return true;
   }
 
@@ -526,7 +527,7 @@ export class RunState implements ShopRunApi {
     let growthSnap: IslandSnapResult | undefined;
 
     if (this.rng.next() < growthChance) {
-      const growth = expandStaticCore(this.board, this.enemy.growthAmount);
+      const growth = expandStaticCore(this.board, 1);
       coreGrew = true;
       growthSnap = this.snapFloatingBlocksOnly();
       text += ` Core expanded ${growth.oldRadius} -> ${growth.newRadius}.`;
@@ -537,7 +538,7 @@ export class RunState implements ShopRunApi {
 
     this.enemy.attackTimer = this.enemy.attackEveryTurns;
     this.pendingEnemyAttackForced = false;
-    this.lastAction = { text, removed: 0, chain: 0, removedIndices: [], enemyAttack: true, coreGrew, snap: growthSnap };
+    this.lastAction = { text, removed: 0, chain: 0, removedIndices: [], enemyAttack: true, enemyTargetIndices: attack.targetIndices, coreGrew, snap: growthSnap };
     this.addLog(text);
 
     if (!poiseWasAppliedThisTurn && this.enemy.poiseTurns > 0) this.enemy.poiseTurns--;
@@ -557,10 +558,10 @@ export class RunState implements ShopRunApi {
   }
 
   private currentCoreGrowthChance(): number {
-    const min = clamp01(this.config.enemyCoreGrowthChanceMin ?? 0.10);
-    const max = Math.max(min, clamp01(this.config.enemyCoreGrowthChanceMax ?? 0.25));
-    const waveRamp = Math.min(1, Math.max(0, (this.wave - 1) / 10));
-    return min + (max - min) * waveRamp;
+    // Design rule: every enemy strike has a flat 25% chance to grow the Breach
+    // by exactly one layer. No wave ramp, no +2 growth spikes.
+    const configured = this.config.enemyCoreGrowthChanceMax ?? this.config.enemyCoreGrowthChanceMin;
+    return clamp01(configured ?? 0.25);
   }
 
   private checkEnemyDefeated(): void {
@@ -585,8 +586,8 @@ export class RunState implements ShopRunApi {
     if (this.runOver) return;
     if (allHeroesDown(this.heroes)) {
       this.finalizeRun('dead', 'All Cleaners were reduced to 0 HP.');
-    } else if (this.board.containmentFailure || containmentExceeded(this.board)) {
-      this.finalizeRun('containment-failure', 'Containment failure: the Static core pushed the Breach past the grid boundary.');
+    } else if (this.board.containmentFailure) {
+      this.finalizeRun('containment-failure', 'Containment failure: the Static core pushed blocks past the grid boundary.');
     }
   }
 
@@ -597,15 +598,6 @@ export class RunState implements ShopRunApi {
     this.metaProgressReport = awardRunMetaProgress(this.heroes, this.metaXpAwarded);
     this.addLog(`${this.lossReason} Meta-XP ${this.metaXpAwarded}.`);
   }
-}
-
-function containmentExceeded(board: BreachBoard): boolean {
-  for (let i = 0; i < board.cellCount; i++) {
-    if (!isOccupied(board.cells[i])) continue;
-    const x = board.xOf(i), y = board.yOf(i), z = board.zOf(i);
-    if (x <= 0 || y <= 0 || z <= 0 || x >= board.maxSize - 1 || y >= board.maxSize - 1 || z >= board.maxSize - 1) return true;
-  }
-  return false;
 }
 
 function clamp01(value: number): number { return Math.max(0, Math.min(1, value)); }

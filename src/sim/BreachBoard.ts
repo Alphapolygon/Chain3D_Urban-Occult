@@ -18,7 +18,7 @@ export class BreachBoard {
   private rng: Mulberry32;
 
   constructor(config: BreachBoardConfig) {
-    const size = config.maxSize % 2 === 0 ? config.maxSize + 1 : config.maxSize;
+    const size = Math.max(3, Math.floor(config.maxSize));
     this.config = { ...config, maxSize: size }; this.maxSize = size; this.cellCount = size * size * size;
     this.center = Math.floor(size / 2); this.cells = new Uint16Array(this.cellCount);
     this.activeRadius = config.initialRadius; this.coreRadius = config.initialCoreRadius;

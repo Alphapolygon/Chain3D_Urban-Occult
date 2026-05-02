@@ -22,7 +22,6 @@ export const FACE_NORMALS: readonly Vec3[] = DIRECTIONS;
 export function makeColorCell(color: number, flags = 0): Cell { return ((color & COLOR_MASK) | OCCUPIED | flags) & 0xffff; }
 export function makeCorruptionCell(color: number, flags = 0): Cell { return makeColorCell(color, CORRUPTION | flags); }
 export function makeStaticCoreCell(): Cell { return (OCCUPIED | STATIC | CORE) & 0xffff; }
-export function makeStaticCell(): Cell { return (OCCUPIED | STATIC) & 0xffff; }
 export function colorOf(cell: Cell): number { return cell & COLOR_MASK; }
 export function isOccupied(cell: Cell): boolean { return (cell & OCCUPIED) !== 0; }
 export function isStatic(cell: Cell): boolean { return (cell & STATIC) !== 0; }

@@ -32,13 +32,13 @@ if (!sceneRoot || !uiRoot) throw new Error('Missing #scene-root or #ui-root.');
 
 
 let runConfig: RunConfig = {
-  board: { maxSize: 15, initialRadius: 4, initialCoreRadius: 1, fillPercent: 0.44, colorCount: 5, lockedPercent: 0.055, staticNoisePercent: 0, seed: 1337 },
+  board: { maxSize: 10, initialRadius: 2, initialCoreRadius: 1, fillPercent: 0.8, colorCount: 5, lockedPercent: 0.055, staticNoisePercent: 0, seed: 1337 },
   movesPerTurn: 3,
   queueLength: 5,
   scorePerBlock: 100,
   matchMinimum: 3,
   maxChains: 12,
-  enemyCoreGrowthChanceMin: 0.10,
+  enemyCoreGrowthChanceMin: 0.25,
   enemyCoreGrowthChanceMax: 0.25
 };
 
@@ -308,6 +308,73 @@ function spawnCombatSlash(kind: CombatEffectKind, anchor: CombatEffectAnchor): v
   window.setTimeout(() => el.remove(), combatEffectDuration(kind));
 }
 
+function spawnAttackProjectile(from: { x: number; y: number }, to: { x: number; y: number }, isEnemy: boolean): void {
+  const projectile = document.createElement('div');
+  projectile.className = `attack-projectile ${isEnemy ? 'enemy' : 'player'}`;
+  const startX = from.x;
+  const startY = from.y;
+  const endX = to.x;
+  const endY = to.y;
+  const dx = endX - startX;
+  const dy = endY - startY;
+  const angle = Math.atan2(dy, dx);
+  projectile.style.left = `${startX}px`;
+  projectile.style.top = `${startY}px`;
+  projectile.style.transform = `translate(-50%, -50%) rotate(${angle}rad) scale(0.72)`;
+  document.body.appendChild(projectile);
+
+  const trail = document.createElement('div');
+  trail.className = `attack-projectile-trail ${isEnemy ? 'enemy' : 'player'}`;
+  trail.style.left = `${startX}px`;
+  trail.style.top = `${startY}px`;
+  trail.style.transform = `translate(0, -50%) rotate(${angle}rad) scaleX(0.05)`;
+  document.body.appendChild(trail);
+
+  const state = { t: 0 };
+  new TWEEN.Tween(state)
+    .to({ t: 1 }, isEnemy ? 520 : 460)
+    .easing(TWEEN.Easing.Cubic.InOut)
+    .onUpdate(() => {
+      const t = state.t;
+      const arc = Math.sin(t * Math.PI) * (isEnemy ? -42 : -30);
+      const x = startX + dx * t;
+      const y = startY + dy * t + arc;
+      projectile.style.left = `${x}px`;
+      projectile.style.top = `${y}px`;
+      projectile.style.transform = `translate(-50%, -50%) rotate(${angle}rad) scale(${0.72 + Math.sin(t * Math.PI) * 0.45})`;
+
+      const trailLength = Math.max(30, Math.hypot(dx, dy) * t);
+      trail.style.width = `${trailLength}px`;
+      trail.style.opacity = `${Math.max(0, 0.92 - t * 0.62)}`;
+      trail.style.transform = `translate(0, -50%) rotate(${angle}rad) scaleX(${Math.max(0.05, t)})`;
+    })
+    .onComplete(() => {
+      projectile.classList.add('impact');
+      trail.remove();
+      window.setTimeout(() => projectile.remove(), 180);
+    })
+    .start();
+}
+
+function spawnPlayerAttackProjectile(sourceHeroIndex: number): void {
+  const attacker = heroBillboards[Math.max(0, Math.min(heroBillboards.length - 1, sourceHeroIndex))];
+  if (!attacker) return;
+  const from = attacker.getScreenAnchor(cameraRig.camera, webglRenderer.domElement, 3.3);
+  const to = enemyBillboard.getScreenAnchor(cameraRig.camera, webglRenderer.domElement, 5.1);
+  spawnAttackProjectile(from, to, false);
+}
+
+function spawnEnemyAttackProjectiles(targetIndices: readonly number[] | undefined): void {
+  const targets = targetIndices && targetIndices.length > 0 ? Array.from(new Set(targetIndices)) : [run.frontlineIndex];
+  const from = enemyBillboard.getScreenAnchor(cameraRig.camera, webglRenderer.domElement, 5.4);
+  for (const targetIndex of targets) {
+    const target = heroBillboards[targetIndex];
+    if (!target) continue;
+    const to = target.getScreenAnchor(cameraRig.camera, webglRenderer.domElement, 3.1);
+    spawnAttackProjectile(from, to, true);
+  }
+}
+
 function hitStop(ms: number): void {
   hitStopUntil = Math.max(hitStopUntil, performance.now() + (speedMode ? Math.min(40, ms) : ms));
 }
@@ -374,6 +441,7 @@ function playLastActionVisuals(): void {
     const attacker = heroBillboards[attackerIndex];
     if (action.heroPower) attacker?.triggerSpecial(760);
     else attacker?.triggerAttack(540);
+    spawnPlayerAttackProjectile(attackerIndex);
 
     if (action.enemyDefeated) enemyBillboard.triggerDeath();
     else enemyBillboard.triggerHit(0.55);
@@ -391,18 +459,17 @@ function playLastActionVisuals(): void {
   if (action.enemyAttack) {
     const snapshot = run.getSnapshot();
     enemyBillboard.triggerAttack(620);
-    if (snapshot.wave >= 11) {
-      for (let i = 0; i < snapshot.heroes.length; i++) {
-        const hero = snapshot.heroes[i];
-        if (!hero) continue;
-        if (hero.hp <= 0) heroBillboards[i]?.triggerDeath();
-        else heroBillboards[i]?.triggerHit(0.42);
-      }
-    } else {
-      const defenderIndex = Math.max(0, Math.min(heroBillboards.length - 1, snapshot.frontlineIndex));
-      const defender = snapshot.heroes[defenderIndex];
-      if (defender?.hp <= 0) heroBillboards[defenderIndex]?.triggerDeath();
-      else heroBillboards[defenderIndex]?.triggerHit(0.46);
+    const targetIndices = action.enemyTargetIndices && action.enemyTargetIndices.length > 0
+      ? Array.from(new Set(action.enemyTargetIndices))
+      : snapshot.wave >= 11
+        ? snapshot.heroes.map((_, i) => i)
+        : [snapshot.frontlineIndex];
+    spawnEnemyAttackProjectiles(targetIndices);
+    for (const targetIndex of targetIndices) {
+      const defender = snapshot.heroes[targetIndex];
+      if (!defender) continue;
+      if (defender.hp <= 0) heroBillboards[targetIndex]?.triggerDeath();
+      else heroBillboards[targetIndex]?.triggerHit(targetIndices.length > 1 ? 0.38 : 0.46);
     }
     spawnCombatSlash('enemy', 'heroes');
     cameraRig.triggerActionCamera(speedMode);
@@ -471,7 +538,7 @@ function syncFighterVisuals(): void {
 function applyDebugConfig(newConfig: RunConfig): void {
   clearKoShopTimer();
   clearEnemyTurnTimer();
-  const maxSize = newConfig.board.maxSize % 2 === 0 ? newConfig.board.maxSize + 1 : newConfig.board.maxSize;
+  const maxSize = Math.max(7, newConfig.board.maxSize);
   const initialRadius = Math.min(newConfig.board.initialRadius, Math.floor(maxSize / 2) - 1);
   runConfig = { ...newConfig, board: { ...newConfig.board, maxSize, initialRadius } };
   run = new RunState(runConfig, draftedHeroes);
@@ -496,7 +563,7 @@ function DebugMenu({ config, onApply, speed, onToggleSpeed, onClose }: { config:
       h('button', { className: 'debug-close', onClick: onClose, title: 'Close debug menu' }, 'x')
     ),
     h('label', null, `Max Grid Boundary: ${maxSize}`),
-    h('input', { type: 'range', min: 7, max: 31, step: 2, value: maxSize, onChange: (e: React.ChangeEvent<HTMLInputElement>) => setMaxSize(parseInt(e.target.value, 10)) }),
+    h('input', { type: 'range', min: 7, max: 31, step: 1, value: maxSize, onChange: (e: React.ChangeEvent<HTMLInputElement>) => setMaxSize(parseInt(e.target.value, 10)) }),
     h('label', null, `Starting Radius: ${initRadius}`),
     h('input', { type: 'range', min: 2, max: Math.max(2, Math.floor(maxSize / 2) - 1), value: Math.min(initRadius, Math.floor(maxSize / 2) - 1), onChange: (e: React.ChangeEvent<HTMLInputElement>) => setInitRadius(parseInt(e.target.value, 10)) }),
     h('label', null, `Fill: ${Math.round(fillPercent * 100)}%`),

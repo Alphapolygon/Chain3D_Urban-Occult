@@ -24,6 +24,32 @@ function StatRow({ label, value }: { label: string; value: React.ReactNode }) {
   return <div className="character-info-row"><span>{label}</span><strong>{value}</strong></div>;
 }
 
+const ACTIVE_POWER_INFO: Record<string, { title: string; description: string }> = {
+  'hex-burst': {
+    title: 'Hex Burst',
+    description: "Directly blasts the Nightmare for heavy damage based on this Cleaner\'s base damage."
+  },
+  'shield-team': {
+    title: 'Team Ward',
+    description: 'Adds shield to every living Cleaner, buying time against splash and AoE enemy attacks.'
+  },
+  'core-stabilize': {
+    title: 'Core Stabilizer',
+    description: 'Shaves one growth layer from the Breach core, then snaps any loose blocks inward so nothing floats.'
+  },
+  'breach-bomb': {
+    title: 'Breach Bomb',
+    description: 'Erases destructible blocks in radius 1 around the selected Breach cell, then resolves gravity snapping.'
+  },
+  'queue-hack': {
+    title: 'Queue Hack',
+    description: 'Rerolls the entire block queue and banks +1 move for the next move batch.'
+  }
+};
+
+function activePowerTitle(id: string): string { return ACTIVE_POWER_INFO[id]?.title ?? id; }
+function activePowerDescription(id: string): string { return ACTIVE_POWER_INFO[id]?.description ?? 'No active power description available yet.'; }
+
 export function CharacterInfoPopup({ selection, heroes, enemy, frontlineIndex, onClose }: CharacterInfoPopupProps) {
   if (!selection) return null;
 
@@ -53,12 +79,14 @@ export function CharacterInfoPopup({ selection, heroes, enemy, frontlineIndex, o
             <StatRow label="AP" value={`${hero.ap}/${hero.maxAp}`} />
             <StatRow label="Base Damage" value={hero.baseDamage} />
             <StatRow label="Color" value={<span style={{ color }}>{color}</span>} />
-            <StatRow label="Active Power" value={hero.activePower} />
+            <StatRow label="Active Power" value={activePowerTitle(hero.activePower)} />
             <StatRow label="Meta Level" value={hero.metaLevel ?? 1} />
             <StatRow label="Sprite States" value={spriteStateList(hero.sprites)} />
           </div>
 
           <div className="character-info-note">
+            <strong>{activePowerTitle(hero.activePower)}:</strong> {activePowerDescription(hero.activePower)}
+            <br />
             Matching this Cleaner&apos;s color fills AP. When AP reaches max, press CAST from the Specials strip.
           </div>
         </div>
@@ -84,7 +112,7 @@ export function CharacterInfoPopup({ selection, heroes, enemy, frontlineIndex, o
           <StatRow label="Damage" value={enemy.damage} />
           <StatRow label="Attack Timer" value={`${enemy.attackTimer} moves`} />
           <StatRow label="Base Cadence" value={`${enemy.attackEveryTurns} moves`} />
-          <StatRow label="Core Growth" value={`+${enemy.growthAmount}`} />
+          <StatRow label="Core Growth" value="25% chance, +1 layer" />
           <StatRow label="Poise" value={enemy.poiseTurns > 0 ? `${enemy.poiseTurns} turn` : 'none'} />
           <StatRow label="Sprite States" value={spriteStateList(enemy.sprites)} />
         </div>
