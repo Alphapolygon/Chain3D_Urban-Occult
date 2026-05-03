@@ -368,6 +368,7 @@ function frame(): void {
     sceneDirty = false;
   }
   if (!paused) breachRenderer.update();
+  fighterStage.renderHiddenStudios(webglRenderer);
   webglRenderer.render(scene, cameraRig.camera);
 }
 

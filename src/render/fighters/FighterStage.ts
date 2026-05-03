@@ -3,12 +3,12 @@ import type { RunSnapshot } from '../../sim/RunState';
 import { FighterBillboard } from './FighterBillboard';
 
 const HERO_BASE_POSITIONS = [
-  new THREE.Vector3(-19.0, -9.0, -3.0),
-  new THREE.Vector3(-16.0, -9.0, 0.0),
-  new THREE.Vector3(-13.0, -9.0, 3.0)
+  new THREE.Vector3(-17.0, -6.0, -3.0),
+  new THREE.Vector3(-14.0, -6.0, 0.0),
+  new THREE.Vector3(-11.0, -6.0, 3.0)
 ] as const;
 
-const ENEMY_BASE_POSITION = new THREE.Vector3(13.0, -9.0, 0.0);
+const ENEMY_BASE_POSITION = new THREE.Vector3(11.0, -6.0, 2.0);
 
 export class FighterStage {
   readonly heroes: FighterBillboard[];
@@ -30,6 +30,11 @@ export class FighterStage {
   setVisible(visible: boolean): void {
     for (const billboard of this.heroes) billboard.setVisible(visible);
     this.enemy.setVisible(visible);
+  }
+
+  renderHiddenStudios(renderer: THREE.WebGLRenderer): void {
+    for (const hero of this.heroes) hero.renderHiddenStudio(renderer);
+    this.enemy.renderHiddenStudio(renderer);
   }
 
   sync(snapshot: RunSnapshot, gameStarted: boolean, camera: THREE.Camera): void {
