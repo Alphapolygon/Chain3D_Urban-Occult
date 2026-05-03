@@ -32,8 +32,10 @@ export class FighterStage {
     this.enemy.setVisible(visible);
   }
 
-  renderHiddenStudios(renderer: THREE.WebGLRenderer): void {
-    for (const hero of this.heroes) hero.renderHiddenStudio(renderer);
+  renderHiddenStudios(renderer: any): void {
+    for (const hero of this.heroes) {
+      hero.renderHiddenStudio(renderer);
+    }
     this.enemy.renderHiddenStudio(renderer);
   }
 

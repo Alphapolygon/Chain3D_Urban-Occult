@@ -2,11 +2,11 @@
 import type { HeroDefinition } from '../sim/CombatSystem';
 
 // 1. Import all the .glb models so the Vite bundler packages them
-const AANG_URL = new URL('../assets/models/hero.glb', import.meta.url).href;
-const CLYDE_URL = new URL('../assets/models/hero.glb', import.meta.url).href;
-const ROCKO_URL = new URL('../assets/models/hero.glb', import.meta.url).href;
-const SANDY_URL = new URL('../assets/models/hero.glb', import.meta.url).href;
-const PATRICK_URL = new URL('../assets/models/hero.glb', import.meta.url).href;
+const AANG_URL = new URL('../assets/models/fighter.glb', import.meta.url).href;
+const CLYDE_URL = new URL('../assets/models/fighter.glb', import.meta.url).href;
+const ROCKO_URL = new URL('../assets/models/fighter.glb', import.meta.url).href;
+const SANDY_URL = new URL('../assets/models/fighter.glb', import.meta.url).href;
+const PATRICK_URL = new URL('../assets/models/fighter.glb', import.meta.url).href;
 
 // Default animation clip indices. 
 // NOTE: You will need to tweak these numbers per-model once you preview them in-game 

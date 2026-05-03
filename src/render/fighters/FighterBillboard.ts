@@ -1,6 +1,10 @@
 // src/render/fighters/FighterBillboard.ts
 import * as THREE from 'three';
 import * as TWEEN from '@tweenjs/tween.js';
+
+import { MeshBasicNodeMaterial } from 'three/webgpu';
+import { texture, uv, oneMinus, vec2, vec4 , smoothstep} from 'three/tsl';
+
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { clone as cloneSkeleton } from 'three/examples/jsm/utils/SkeletonUtils.js';
 import type { GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js';
@@ -40,7 +44,7 @@ export class FighterBillboard {
   // FIXED: Tightly cropped orthographic camera so feet touch the floor
   private readonly hiddenCamera = new THREE.OrthographicCamera(-2.75, 2.75, 2.75, -2.75, 0.1, 20);
   private readonly renderTarget: THREE.WebGLRenderTarget;
-  private readonly billboardMesh: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>;
+  private readonly billboardMesh: THREE.Mesh<THREE.PlaneGeometry, any>;
   private readonly dummyFighter: THREE.Mesh;
   private readonly domHud: HTMLDivElement;
   private readonly hitArea: HTMLDivElement;
@@ -60,6 +64,8 @@ export class FighterBillboard {
   private alive = true;
   private lastRenderTime = performance.now();
   private clickHandler: (() => void) | null = null;
+
+  private readonly reflectionMesh: THREE.Mesh;
 
   // NEW: Dynamic Model Tracking
   private currentModelUrl?: string;
@@ -107,22 +113,60 @@ export class FighterBillboard {
     this.renderTarget.texture.colorSpace = THREE.SRGBColorSpace;
     this.renderTarget.texture.generateMipmaps = false;
 
-    // FIXED: Plane dimensions matched to the new tightly cropped camera
+// // FIXED: Clean geometry with NO scale hacks and shifted pivots!
     const planeSize = isEnemy ? 6.9 : 5.5;
-    const planeGeo = new THREE.PlaneGeometry(planeSize, planeSize);
-    const planeMat = new THREE.MeshBasicMaterial({
-      map: this.renderTarget.texture,
+
+    // 1. Main Billboard Geometry (Shift origin to the bottom edge)
+    const mainGeo = new THREE.PlaneGeometry(planeSize, planeSize);
+    mainGeo.translate(0, (planeSize / 2) - 0.1, 0);
+
+    // 2. Reflection Billboard Geometry (Shift origin to the top edge)
+    const refGeo = new THREE.PlaneGeometry(planeSize, planeSize);
+    refGeo.translate(0, -(planeSize / 2) - 0.1, 0);
+
+    // --- MAIN BILLBOARD (TSL) ---
+    const mainMat = new MeshBasicNodeMaterial({
       transparent: true,
-      alphaTest: 0.02,
+      alphaTest: 0.2,
       depthWrite: false,
       side: THREE.DoubleSide,
       toneMapped: false
     });
-    this.billboardMesh = new THREE.Mesh(planeGeo, planeMat);
-    // Sunk by 0.1 so the feet lock perfectly to the mirror
-    this.billboardMesh.position.y = (planeSize / 2) - 0.1;
+
+    // WebGPU RenderTargets flip Y, so we invert it here
+    const mainUv = vec2(uv().x, oneMinus(uv().y));
+    mainMat.colorNode = texture(this.renderTarget.texture, mainUv);
+
+    this.billboardMesh = new THREE.Mesh(mainGeo, mainMat);
+    // Keep position at 0, 0, 0 so it pivots perfectly around the feet!
     this.billboardMesh.renderOrder = 5;
     this.group.add(this.billboardMesh);
+
+    // --- REFLECTION BILLBOARD (TSL) ---
+    const refMat = new MeshBasicNodeMaterial({
+      transparent: true,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+      toneMapped: false
+    });
+
+    // Use standard UVs to project the texture upside down
+    const refUv = vec2(uv().x, uv().y);
+    const texNode = texture(this.renderTarget.texture, refUv);
+
+    // 1. Pipe ONLY the RGB into the color node
+    refMat.colorNode = texNode.rgb;
+
+    // 2. THE FIX: Pipe the Alpha gradient explicitly into the opacity node!
+    // uv().y is 1.0 at the top (feet), which becomes 55% opaque.
+    // uv().y is 0.0 at the bottom (head), which becomes 0% opaque.
+    const fade = oneMinus(smoothstep(1.0, 0.75, refUv.y));
+    
+
+    refMat.opacityNode = texNode.a.mul(fade).mul(0.055)
+    this.reflectionMesh = new THREE.Mesh(refGeo, refMat);
+    this.reflectionMesh.renderOrder = 4;
+    this.group.add(this.reflectionMesh);
 
     // --- DOM UI SETUP ---
     this.domHud = document.createElement('div');
@@ -159,7 +203,7 @@ export class FighterBillboard {
     this.timerEl = this.domHud.querySelector('.hud-timer')!;
   }
 
-  renderHiddenStudio(renderer: THREE.WebGLRenderer): void {
+  renderHiddenStudio(renderer: any): void {
     if (!this.visible) return;
 
     const now = performance.now();
@@ -180,7 +224,11 @@ export class FighterBillboard {
     renderer.setRenderTarget(this.renderTarget);
     renderer.setClearColor(0x000000, 0);
     renderer.clear(true, true, true);
+    
+
+
     renderer.render(this.hiddenScene, this.hiddenCamera);
+    
     renderer.setRenderTarget(previousTarget);
     renderer.setClearColor(previousClearColor, previousClearAlpha);
   }
@@ -188,6 +236,7 @@ export class FighterBillboard {
   setVisible(visible: boolean): void {
     this.visible = visible;
     this.billboardMesh.visible = visible;
+    this.reflectionMesh.visible = visible;
     this.domHud.style.display = visible ? 'block' : 'none';
     this.hitArea.style.display = visible ? 'block' : 'none';
   }
@@ -253,6 +302,7 @@ export class FighterBillboard {
     
     // FIXED: True 2D Sprite Billboarding (Perfectly parallel to camera glass)
     this.billboardMesh.quaternion.copy(camera.quaternion);
+    this.reflectionMesh.quaternion.copy(camera.quaternion);
     
     this.positionDomElements(camera);
   }
@@ -375,6 +425,13 @@ export class FighterBillboard {
   private punchBillboard(scale: number, durationMs: number): void {
     new TWEEN.Tween(this.billboardMesh.scale)
       .to({ x: scale, y: scale, z: scale }, durationMs * 0.5)
+      .easing(TWEEN.Easing.Quadratic.Out)
+      .yoyo(true)
+      .repeat(1)
+      .start();
+
+   new TWEEN.Tween(this.reflectionMesh.scale)
+      .to({ x: scale, y: scale, z: scale }, durationMs * 0.5) 
       .easing(TWEEN.Easing.Quadratic.Out)
       .yoyo(true)
       .repeat(1)

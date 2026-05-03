@@ -1,4 +1,5 @@
 import './style.css';
+import * as THREE from 'three';
 import * as TWEEN from '@tweenjs/tween.js';
 import { createElement } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -20,6 +21,8 @@ import { BreachPointerInput } from './input/BreachPointerInput';
 import { GameApp } from './ui/GameApp';
 import type { CharacterInfoSelection } from './ui/CharacterInfoPopup';
 
+import Stats from 'three/examples/jsm/libs/stats.module.js';
+
 const sceneRoot = document.querySelector<HTMLDivElement>('#scene-root');
 const uiRoot = document.querySelector<HTMLDivElement>('#ui-root');
 if (!sceneRoot || !uiRoot) throw new Error('Missing #scene-root or #ui-root.');
@@ -37,7 +40,7 @@ let koShopTimeout: number | null = null;
 let enemyTurnTimeout: number | null = null;
 
 const root = createRoot(uiRoot);
-const { scene, renderer: webglRenderer, cameraRig } = createGameScene(sceneRoot);
+const { scene, renderer: webglRenderer, cameraRig, mirrorTarget, mirrorCamera, mirrorMesh } = createGameScene(sceneRoot);
 const cubeModel = await loadCubeModel();
 const picking = new BreachPicking();
 const sfx = new SoundEngine();
@@ -48,6 +51,14 @@ boardEffects.attachToBreach(breachRenderer);
 
 const ENEMY_TURN_DELAY_MS = 1080;
 const KO_TO_SHOP_DELAY_MS = 1500;
+
+const stats = new Stats();
+stats.dom.style.position = 'absolute';
+stats.dom.style.top = '0px';
+stats.dom.style.right = '0px';
+stats.dom.style.left = 'auto'; // Override Three.js default left alignment
+stats.dom.style.zIndex = '99999';
+document.body.appendChild(stats.dom);
 
 const combatEffects = new CombatEffects(fighterStage, cameraRig, webglRenderer.domElement, sfx, {
   getSpeedMode: () => speedMode,
@@ -82,8 +93,14 @@ new BreachPointerInput(webglRenderer.domElement, cameraRig, picking, sfx, {
 window.addEventListener('resize', () => {
   webglRenderer.setSize(window.innerWidth, window.innerHeight);
   cameraRig.resize(window.innerWidth, window.innerHeight);
+  mirrorTarget.setSize(window.innerWidth * window.devicePixelRatio, window.innerHeight * window.devicePixelRatio);
+  mirrorCamera.aspect = window.innerWidth / window.innerHeight;
+  mirrorCamera.updateProjectionMatrix();
 });
 
+function randomSeed(): number {
+  return (Date.now() ^ Math.floor(Math.random() * 0xffffffff)) >>> 0;
+}
 
 function createBreachRenderer(): BreachRenderer {
   return new BreachRenderer(scene, run.board.cellCount, cubeModel.geometry, cubeModel.material);
@@ -356,27 +373,29 @@ function renderUi(): void {
   }));
 }
 
+await webglRenderer.init();
+
 function frame(): void {
-  requestAnimationFrame(frame);
+  stats.update();
+  
   const paused = performance.now() < hitStopUntil;
   if (!paused) TWEEN.update();
   syncBreachInputEnabled();
   cameraRig.update();
   syncFighterVisuals();
+  
   if (sceneDirty) {
     breachRenderer.syncFromBoard(run.board);
     sceneDirty = false;
   }
   if (!paused) breachRenderer.update();
+  
+  // PASS 1: Render the Hidden Character Studios
   fighterStage.renderHiddenStudios(webglRenderer);
-  webglRenderer.render(scene, cameraRig.camera);
+
+  // PASS 2: Render the Main Game! (No more mirror crash)
+  webglRenderer.render(scene, cameraRig.camera); 
 }
-
-function randomSeed(): number {
-  return (Date.now() ^ Math.floor(Math.random() * 0xffffffff)) >>> 0;
-}
-
-
-// Initial UI/render start must happen after debugRuntimeActions is initialized.
+// Initial UI/render start
 invalidate(true);
-frame();
+webglRenderer.setAnimationLoop(frame);
